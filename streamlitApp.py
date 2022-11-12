@@ -147,11 +147,13 @@ st.markdown("""---""")
 st.subheader('Google Analytics Data')
 
 # GOOGLE ANALYTICS DATA API SET UP
-os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = 'GA4_service_accounts/ftm-afrikaans_service_account_key.json'
-property_id = '177200876'
+# TO DELETE: os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = 'GA4_service_accounts/ftm-afrikaans_service_account_key.json'
+afrikaans_property_id = '177200876'
+english_property_id = '152408808'
 
-# creating GA4Report object instance
-ga4 = GA4Report(property_id)
+# creating GA4Report object instances
+afrikaans_ga4 = GA4Report(afrikaans_property_id)
+english_ga4 = GA4Report(english_property_id)
 
 # variables
 dimension_list = ['date', 'country']
@@ -161,35 +163,59 @@ date_range = (st.session_state['date_range'][0].strftime('%Y-%m-%d'),
                 st.session_state['date_range'][1].strftime('%Y-%m-%d'))
 
 # run the GA4 report
-report_df = ga4.run_report(
+afrikaans_report_df = afrikaans_ga4.run_report(
+    dimension_list, metric_list,
+    date_ranges = [date_range],
+    #row_limit = 1000,
+    offset_row = 0
+)
+english_report_df = english_ga4.run_report(
     dimension_list, metric_list,
     date_ranges = [date_range],
     #row_limit = 1000,
     offset_row = 0
 )
 
-report_df = pd.DataFrame(columns = report_df['headers'], data = report_df['rows'])
+afrikaans_report_df = pd.DataFrame(columns = afrikaans_report_df['headers'],
+                                    data = afrikaans_report_df['rows'])
+english_report_df = pd.DataFrame(columns = english_report_df['headers'],
+                                    data = english_report_df['rows'])
 
 # Convert date column to datetime, then sort by date
-report_df['date'] = pd.to_datetime(report_df['date'])
-report_df['date'] = report_df['date'].dt.date
-report_df = report_df.sort_values(by=['date'])
+afrikaans_report_df['date'] = pd.to_datetime(afrikaans_report_df['date'])
+afrikaans_report_df['date'] = afrikaans_report_df['date'].dt.date
+afrikaans_report_df = afrikaans_report_df.sort_values(by=['date'])
+english_report_df['date'] = pd.to_datetime(english_report_df['date'])
+english_report_df['date'] = english_report_df['date'].dt.date
+english_report_df = english_report_df.sort_values(by=['date'])
 
 # --- Active Users by Day ---
-active_users_df = report_df[['date', 'active1DayUsers', 'active7DayUsers', 'active28DayUsers']]
+af_active_users_df = afrikaans_report_df[['date', 'active1DayUsers', 'active7DayUsers', 'active28DayUsers']]
+en_active_users_df = english_report_df[['date', 'active1DayUsers', 'active7DayUsers', 'active28DayUsers']]
 
-active_users_df = active_users_df.astype({
+af_active_users_df = af_active_users_df.astype({
+    'active1DayUsers': 'int32',
+    'active7DayUsers': 'int32',
+    'active28DayUsers': 'int32'})
+en_active_users_df = en_active_users_df.astype({
     'active1DayUsers': 'int32',
     'active7DayUsers': 'int32',
     'active28DayUsers': 'int32'})
 
 # Group data by day and plot as timeseries chart
-active_users_df = active_users_df.groupby(['date']).sum().reset_index()
-st.write(active_users_df)
+af_active_users_df = af_active_users_df.groupby(['date']).sum().reset_index()
+st.write(af_active_users_df)
+en_active_users_df = en_active_users_df.groupby(['date']).sum().reset_index()
+st.write(en_active_users_df)
 
-active_users_fig = px.line(active_users_df, x='date',
+af_active_users_fig = px.line(af_active_users_df, x='date',
                             y=['active1DayUsers', 'active7DayUsers', 'active28DayUsers'],
                                 title = "Active Users by Day",
                                 labels={"value": "Active Users", "date": "Date", "variable": "Trailing"})
-st.plotly_chart(active_users_fig)
+st.plotly_chart(af_active_users_fig)
+en_active_users_fig = px.line(en_active_users_df, x='date',
+                            y=['active1DayUsers', 'active7DayUsers', 'active28DayUsers'],
+                                title = "Active Users by Day",
+                                labels={"value": "Active Users", "date": "Date", "variable": "Trailing"})
+st.plotly_chart(en_active_users_fig)
   # -----------------------------------------
