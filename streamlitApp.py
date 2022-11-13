@@ -7,7 +7,9 @@ from google.oauth2 import service_account
 from google.cloud import bigquery
 
 # https://learndataanalysis.org/source-code-automate-google-analytics-4-ga4-reporting-with-python-step-by-step-tutorial/
-from jj_data_connector.ga4 import GA4Report, Metrics, Dimensions
+# from jj_data_connector.ga4 import GA4Report, Metrics, Dimensions
+import ga4
+from google.analytics.data_v1beta import BetaAnalyticsDataClient
 import os
 
 import datetime
@@ -147,13 +149,18 @@ st.markdown("""---""")
 st.subheader('Google Analytics Data')
 
 # GOOGLE ANALYTICS DATA API SET UP
-# TO DELETE: os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = 'GA4_service_accounts/ftm-afrikaans_service_account_key.json'
+# os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = st.secrets
+# ga_client = BetaAnalyticsDataClient(credentials=ga_credentials)
+
 afrikaans_property_id = '177200876'
 english_property_id = '152408808'
 
 # creating GA4Report object instances
-afrikaans_ga4 = GA4Report(afrikaans_property_id)
-english_ga4 = GA4Report(english_property_id)
+ga_credentials = service_account.Credentials.from_service_account_info(
+    st.secrets["GOOGLE_APPLICATION_CREDENTIALS"]
+)
+afrikaans_ga4 = ga4.GA4Report(afrikaans_property_id, ga_credentials)
+english_ga4 = ga4.GA4Report(english_property_id, ga_credentials)
 
 # variables
 dimension_list = ['date', 'country']
@@ -210,12 +217,12 @@ st.write(en_active_users_df)
 
 af_active_users_fig = px.line(af_active_users_df, x='date',
                             y=['active1DayUsers', 'active7DayUsers', 'active28DayUsers'],
-                                title = "Active Users by Day",
+                                title = "Afrikaans - Active Users by Day",
                                 labels={"value": "Active Users", "date": "Date", "variable": "Trailing"})
 st.plotly_chart(af_active_users_fig)
 en_active_users_fig = px.line(en_active_users_df, x='date',
                             y=['active1DayUsers', 'active7DayUsers', 'active28DayUsers'],
-                                title = "Active Users by Day",
+                                title = "US English - Active Users by Day",
                                 labels={"value": "Active Users", "date": "Date", "variable": "Trailing"})
 st.plotly_chart(en_active_users_fig)
   # -----------------------------------------
