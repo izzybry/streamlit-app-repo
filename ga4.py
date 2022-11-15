@@ -8,6 +8,9 @@ from google.analytics.data_v1beta.types import (Dimension, Metric, DateRange, Me
                                                FilterExpression, MetricAggregation, CohortSpec)
 from google.analytics.data_v1beta.types import RunReportRequest, RunRealtimeReportRequest
 
+class GA4Exception(Exception):
+    '''base class for GA4 exceptions'''
+    
 class GA4Report:
     def __init__(self, property_id, credentials):
         self.property_id = property_id
