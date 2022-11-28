@@ -28,15 +28,14 @@ credentials = service_account.Credentials.from_service_account_info(
 )
 client = bigquery.Client(credentials=credentials)
 
-# Title and subtitle
+# Title
 st.title('Curious Learning')
-st.header('User Acquisition and Engagement Metrics')
 
 # Set up sidebar with date picker
 select_date_range = st.sidebar.date_input(
     "Select Date Range:",
-    ((pd.to_datetime("today").date() - pd.Timedelta(28, unit='D')),
-        pd.to_datetime("today").date()),
+    ((pd.to_datetime("today").date() - pd.Timedelta(29, unit='D')),
+        (pd.to_datetime("today").date() - pd.Timedelta(1, unit='D'))),
     key = 'date_range'
 )
 
@@ -103,18 +102,18 @@ app_propertyID_dict = {
     "FTM - Zulu": "155849122"
 }
 
-# get Google Analytics credentials from secrets
+# Get Google Analytics credentials from secrets
 ga_credentials = service_account.Credentials.from_service_account_info(
     st.secrets["GOOGLE_APPLICATION_CREDENTIALS"]
 )
-# set global report variables
-dimension_list = ['date', 'country', 'countryId']
+# Set global report variables
+dimension_list = ['date', 'country', 'countryId', 'language']
 metric_list = ['active1DayUsers', 'active7DayUsers', 'active28DayUsers',
                 'newUsers', 'dauPerMau', 'dauPerWau', 'wauPerMau']
 date_range = (st.session_state['date_range'][0].strftime('%Y-%m-%d'),
                 st.session_state['date_range'][1].strftime('%Y-%m-%d'))
 
-# get data for all selected language / app buckets
+# Get data for all selected language / app buckets
 main_df = pd.DataFrame()
 for i in st.session_state['buckets']:
     property_id = app_propertyID_dict[i]
@@ -152,6 +151,94 @@ main_df = main_df.astype({
     'wauPerMau': 'float'
 })
 
+# Subtitle: Learner Acquisition Metrics
+st.header('Learner Acquisition Metrics')
+
+# Set up tabs for new user metrics
+tab1, tab2, tab3 = st.tabs(["New Users by Day", "New Users by Week", "New Users by Month"])
+
+# --- New Users by Day ---
+daily_new_users_df = main_df[['date','newUsers']]
+
+daily_new_users_df = daily_new_users_df.groupby(['date']).sum().reset_index()
+daily_new_users_df['7 Day Rolling Mean'] = daily_new_users_df['newUsers'].rolling(7).mean()
+daily_new_users_df['30 Day Rolling Mean'] = daily_new_users_df['newUsers'].rolling(30).mean()
+daily_new_users_df.rename(columns={'newUsers': 'Daily New Users'})
+
+daily_new_users_fig = px.line(daily_new_users_df, x='date',
+                                y=['newUsers', '7 Day Rolling Mean', '30 Day Rolling Mean'],
+                                title="New Users by Day",
+                                labels={"value": "New Users", "date": "Date",
+                                    "newUsers": "Daily New Users"})
+tab1.plotly_chart(daily_new_users_fig)
+
+# --- New Users by Week ---
+weekly_new_users_df = main_df[['date','newUsers']]
+
+weekly_new_users_df['date'] = pd.to_datetime(weekly_new_users_df['date'])
+weekly_new_users_df.set_index('date', inplace=True)
+weekly_new_users_df = weekly_new_users_df.resample('W').sum()
+
+weekly_new_users_fig = px.line(weekly_new_users_df,
+                                y=['newUsers'],
+                                title="New Users by Week",
+                                labels={"value": "New Users", "date": "Date"},
+                                markers=True)
+tab2.plotly_chart(weekly_new_users_fig)
+
+# --- New Users by Month ---
+monthly_new_users_df = main_df[['date','newUsers']]
+
+monthly_new_users_df['date'] = pd.to_datetime(monthly_new_users_df['date'])
+monthly_new_users_df.set_index('date', inplace=True)
+monthly_new_users_df = monthly_new_users_df.resample('M').sum()
+
+monthly_new_users_fig = px.line(monthly_new_users_df,
+                                y=['newUsers'],
+                                title="New Users by Month",
+                                labels={"value": "New Users", "date": "Date"},
+                                markers=True)
+tab3.plotly_chart(monthly_new_users_fig)
+
+
+st.markdown('***')
+tab4, tab5 = st.tabs(["New Users by Country", "New Users by Language"])
+
+# --- New Users by Country ---
+new_users_by_country_df = main_df[
+    ['country', 'newUsers']
+]
+
+new_users_by_country_df = new_users_by_country_df.groupby(['country']).sum().reset_index()
+
+country_fig2 = px.choropleth(new_users_by_country_df, locations='country',
+                                    color='newUsers',
+                                    color_continuous_scale='Emrld',
+                                    locationmode='country names',
+                                    title='New Users by Country',
+                                    labels={'newUsers':'New Users'})
+country_fig2.update_layout(geo=dict(bgcolor= 'rgba(0,0,0,0)'))
+
+tab4.plotly_chart(country_fig2)
+
+# --- New Users by Language ---
+new_users_by_lang_df = main_df[
+    ['language', 'newUsers']
+]
+
+new_users_by_lang_df = new_users_by_lang_df.groupby(['language']).sum().reset_index()
+# new_users_by_lang_fig = px.pie(new_users_by_lang_df, values='newUsers', names='language',
+#                                 title="New Users by Language")
+new_users_by_lang_fig = px.bar(new_users_by_lang_df, x='language',
+                                 y='newUsers',
+                                 title="New Users by Language")
+tab5.markdown("*Note that 'language' below is the language setting of the user's browser or device. e.g. English*")
+tab5.plotly_chart(new_users_by_lang_fig)
+
+# Subtitle: Learner Engagement Metrics
+st.markdown("***")
+st.header('Learner Engagement Metrics')
+
 # --- Active Users by Country ---
 users_by_country_df = main_df[
     ['country', 'active1DayUsers']
@@ -168,22 +255,6 @@ country_fig = px.choropleth(users_by_country_df, locations='country',
 country_fig.update_layout(geo=dict(bgcolor= 'rgba(0,0,0,0)'))
 st.plotly_chart(country_fig)
 
-# --- New Users by Country ---
-new_users_by_country_df = main_df[
-    ['country', 'newUsers']
-]
-
-new_users_by_country_df = new_users_by_country_df.groupby(['country']).sum().reset_index()
-
-country_fig2 = px.choropleth(new_users_by_country_df, locations='country',
-                                    color='newUsers',
-                                    color_continuous_scale='Emrld',
-                                    locationmode='country names',
-                                    title='New Users by Country',
-                                    labels={'newUsers':'New Users'})
-country_fig2.update_layout(geo=dict(bgcolor= 'rgba(0,0,0,0)'))
-st.plotly_chart(country_fig2)
-
 # --- Users Stickiness ---
 user_stickiness_df = main_df[
     ['date', 'dauPerMau', 'dauPerWau', 'wauPerMau']
@@ -196,7 +267,7 @@ user_stickiness_df = user_stickiness_df.groupby(['date']).sum().reset_index()
 
 user_stickiness_fig = px.line(user_stickiness_df, x='date',
                             y=['dauPerMau', 'dauPerWau', 'wauPerMau'],
-                                title = "User Stickiness",
+                                title="User Stickiness",
                                 labels={'value': '%', 'date': 'Date'})
 st.plotly_chart(user_stickiness_fig)
 
@@ -210,7 +281,7 @@ active_users_df = active_users_df.groupby(['date']).sum().reset_index()
 
 active_users_fig = px.line(active_users_df, x='date',
                             y=['active1DayUsers', 'active7DayUsers', 'active28DayUsers'],
-                                title = "Active Users by Day",
+                                title="Active Users by Day",
                                 labels={"value": "Active Users",
                                     "date": "Date", "variable": "Trailing"})
 st.plotly_chart(active_users_fig)
