@@ -5,6 +5,7 @@
 import streamlit as st
 from google.oauth2 import service_account
 from google.cloud import bigquery
+from gsheetsdb import connect
 
 # https://learndataanalysis.org/source-code-automate-google-analytics-4-ga4-reporting-with-python-step-by-step-tutorial/
 # from jj_data_connector.ga4 import GA4Report, Metrics, Dimensions
@@ -201,7 +202,6 @@ monthly_new_users_fig = px.line(monthly_new_users_df,
 tab3.plotly_chart(monthly_new_users_fig)
 
 
-st.markdown('***')
 tab4, tab5 = st.tabs(["New Users by Country", "New Users by Language"])
 
 # --- New Users by Country ---
@@ -234,6 +234,40 @@ new_users_by_lang_fig = px.bar(new_users_by_lang_df, x='language',
                                  title="New Users by Language")
 tab5.markdown("*Note that 'language' below is the language setting of the user's browser or device. e.g. English*")
 tab5.plotly_chart(new_users_by_lang_fig)
+
+# --- Learner Acquisition Cost ---
+# Create a Google Sheets connection object.
+credentials = service_account.Credentials.from_service_account_info(
+    st.secrets["gcp_service_account"],
+    scopes=[
+        "https://www.googleapis.com/auth/spreadsheets",
+    ]
+)
+conn = connect(credentials=credentials)
+
+# Perform SQL query on the Google Sheet.
+# Uses st.cache to only rerun when the query changes or after 10 min.
+@st.cache(ttl=600)
+def run_query(query):
+    rows = conn.execute(query, headers=1)
+    rows = rows.fetchall()
+    return rows
+
+sheet_url = st.secrets["Cost_gsheets_url"]
+rows = run_query(f'SELECT * FROM "{sheet_url}"')
+# st.write(rows)
+sheets_df = pd.DataFrame(columns = ['MonthYear', 'Country', 'Language', 'CostUSD', 'Type', 'Memo'],
+                            data = rows)
+# Convert date column to datetime, then sort by date
+sheets_df['MonthYear'] = pd.to_datetime(sheets_df['MonthYear'])
+sheets_df['MonthYear'] = sheets_df['MonthYear'].dt.date
+sheets_df = sheets_df.sort_values(by=['MonthYear'])
+sheets_df = sheets_df.astype({
+    'CostUSD': 'float'
+})
+sheets_df['CostUSD'] = sheets_df['CostUSD'].round(decimals=2)
+st.write(sheets_df)
+
 
 # Subtitle: Learner Engagement Metrics
 st.markdown("***")
