@@ -22,13 +22,6 @@ import plotly
 import plotly.express as px
 from plotly.graph_objs import *
 
-# BIGQUERY SET UP
-# Create API client.
-credentials = service_account.Credentials.from_service_account_info(
-    st.secrets["gcp_service_account"]
-)
-client = bigquery.Client(credentials=credentials)
-
 # Title
 st.title('Curious Learning')
 
@@ -103,6 +96,77 @@ app_propertyID_dict = {
     "FTM - Zulu": "155849122"
 }
 
+app_bqID_dict = {
+    "FTM - English": "ftm-english",
+    "FTM - Afrikaans": "ftm-afrikaans",
+    "FTM - AppBucket1": "ftm-hindi",
+    "FTM-AppBucket2": "ftm-brazilian-portuguese",
+    "FTM-AppBucket3": "ftm-b9d99",
+    "FTM - French": "ftm-french",
+    "FTM - isiXhosa": "ftm-isixhosa",
+    "FTM - Kinayrwanda": "ftm-kinayrwanda",
+    "FTM - Oromo": "ftm-oromo",
+    "FTM - SePedi": "ftm-sepedi",
+    "FTM - Somali": "ftm-somali",
+    "FTM - SouthAfricanEnglish": "ftm-southafricanenglish",
+    "FTM - Spanish": "ftm-spanish",
+    "FTM - Swahili": "ftm-swahili",
+    "FTM - Zulu": "ftm-zulu"
+}
+
+# Need to confirm mappings below
+app_info_id_lang_dict = {
+    "com.eduapp4syria.feedthemonsterENGLISH": "English", 
+    "com.feedthemonsterENGLISHonto.kgl": "English",
+    "com.eduapp4syria.feedthemonsterMarathi": "Marathi",
+    "com.eduapp4syria.feedthemonsterNepali": "Nepali",
+    "com.eduapp4syria.feedthemonsterKurdish": "Kurdish",
+    "com.eduapp4syria.feedthemonsterArabic": "Arabic",
+    "com.eduapp4syria.feedthemonsterHindi": "Hindi",
+    "com.eduapp4syria.feedthemonsterPashto": "Pashto",
+    "com.eduapp4syria.feedthemonsterTajik": "Tajik",
+    "com.eduapp4syria.feedthemonsterAmharic": "Amharic",
+    "com.eduapp4syria.feedthemonsterWolof": "Wolof",
+    "com.eduapp4syria.feedthemonsterMalay": "Malay",
+    "com.eduapp4syria.feedthemonsterThai": "Thai",
+    "com.eduapp4syria.feedthemonsterAfrikaans": "Afrikaans",
+    "com.eduapp4syria.feedthemonsterBangla": "Bangala",
+    "com.eduapp4syria.feedthemonsterLugandan": "Ganda",
+    "com.eduapp4syria.feedthemonsterSiswati": "Siswati",
+    "com.eduapp4syria.feedthemonsterTsonga": "Tsonga",
+    "com.eduapp4syria.feedthemonsterWAENGLISH": "unknown", #??
+    "com.eduapp4syria.feedthemonsterEnglishIndian": "unknown", #??
+    "com.eduapp4syria.feedthemonsterENGLISHAUS": "unknown", #??
+    "com.eduapp4syria.feedthemonsterBrazilianPortuguese": "Portuguese",
+    "com.eduapp4syria.feedthemonsterMalagasy": "Malagasy",
+    "com.eduapp4syria.feedthemonsterTagalog": "Tagalog",
+    "com.eduapp4syria.feedthemonsterTswana": "Tswana",
+    "com.eduapp4syria.feedthemonsterSesotho": "Sesotho",
+    "com.eduapp4syria.feedthemonsterVenda": "Venda",
+    "com.eduapp4syria.feedthemonsterHatianCreole": "Haitian; Haitian Creole",
+    "com.eduapp4syria.feedthemonsterHausa": "Hausa",
+    "com.eduapp4syria.feedthemonsterFarsi": "Farsi",
+    "com.eduapp4syria.feedthemonsterGeorgian": "Georgian",
+    "com.eduapp4syria.feedthemonsterUkranian": "Ukranian",
+    "com.eduapp4syria.feedthemonsterTURKISH": "Turkish",
+    "com.eduapp4syria.feedthemonsterFrench": "French",
+    "com.eduapp4syria.feedthemonsterisiXhosa": "Xhosa",
+    "com.eduapp4syria.feedthemonsterKinyarwanda": "Kinyarwanda",
+    "com.eduapp4syria.feedthemonsterOromo": "Oromo",
+    "com.eduapp4syria.feedthemonsterSePedi": "SePedi",
+    "com.eduapp4syria.feedthemonsterSOMALI": "Somali",
+    "com.eduapp4syria.feedthemonsterSAEnglish": "English", #?? south african english, should we differentiate?
+    "com.eduapp4syria.feedthemonsterSPANISH": "Spanish",
+    "com.eduapp4syria.feedthemonsterSwahili": "Swahili",
+    "com.eduapp4syria.FeedTheMonsterZULU": "Zulu",
+    "com.eduapp4syria.feedthemonsterAzerbaijani": "Azerbaijani",
+    "com.eduapp4syria.feedthemonsterVietnamese": "Vietnamese",
+    "com.eduapp4syria.feedthemonsterJavanese": "Javanese",
+    "com.eduapp4syria.feedthemonsterIgbo": "Igbo",
+    "com.eduapp4syria.feedthemonsterShona": "Shona",
+    "com.eduapp4syria.feedthemonsterYoruba": "Yoruba"
+}
+
 # Get Google Analytics credentials from secrets
 ga_credentials = service_account.Credentials.from_service_account_info(
     st.secrets["GOOGLE_APPLICATION_CREDENTIALS"]
@@ -152,11 +216,141 @@ main_df = main_df.astype({
     'wauPerMau': 'float'
 })
 
+# ---------------------------------------
+# BigQuery set up
+# Create API client.
+credentials = service_account.Credentials.from_service_account_info(
+    st.secrets["gcp_service_account"]
+)
+client = bigquery.Client(credentials=credentials)
+
+# Get BQ data for all selected language / app buckets
+bq_df = pd.DataFrame()
+for i in st.session_state['buckets']:
+    property_id = app_propertyID_dict[i]
+    bq_id = app_bqID_dict[i]
+    sql_query = f"""
+        SELECT event_date, event_name, properties, app_info.id, geo.country
+        FROM `{bq_id}.analytics_{property_id}.events_20*`,
+        UNNEST (user_properties) as properties
+        WHERE parse_date('%y%m%d', _table_suffix) between @start and @end
+        and event_name = 'first_open'
+    """
+    query_parameters = [
+        bigquery.ScalarQueryParameter("start", "DATE", st.session_state['date_range'][0]),
+        bigquery.ScalarQueryParameter("end", "DATE", st.session_state['date_range'][1])
+    ]
+    job_config = bigquery.QueryJobConfig(
+        query_parameters = query_parameters
+    )
+    rows_raw = client.query(sql_query, job_config=job_config)
+    rows = [dict(row) for row in rows_raw]
+    temp_df = pd.DataFrame(rows)
+    temp_df.insert(1, "Language/App Bucket", i)
+    bq_df = pd.concat([bq_df, temp_df])
+
+bq_df = bq_df.sort_values(by=['event_date'])
+# Convert event_date column to datetime
+bq_df['event_date'] = pd.to_datetime(bq_df['event_date'])
+bq_df['event_date'] = bq_df['event_date'].dt.date
+
+# st.write("bq_df len = " + str(bq_df.shape[0]))
+# st.write(bq_df.head(n = 1000))
+
+# BQ learner acquisition
+bq_daily_new_users = bq_df[bq_df['event_name'] == 'first_open'].groupby(
+    ['event_date'])['event_date'].count().reset_index(name='count')
+bq_daily_new_users_fig = px.line(bq_daily_new_users, x='event_date', y='count', labels={
+                     "event_date": "Date (Day)",
+                     "count": "New Users"},
+                     title = "New User Count by Day")
+st.plotly_chart(bq_daily_new_users_fig)
+
+# BQ learner acquisition cost by month
+bq_lac = bq_df[['event_date', 'event_name', 'id']]
+result = []
+for i in bq_lac['id']:
+    result.append(app_info_id_lang_dict[i])
+
+bq_lac['language'] = result
+# st.write("bq_lac len = " + str(bq_lac.shape[0]))
+# st.write(bq_lac.head(n = 1000))
+
+bq_lac['event_date'] = pd.to_datetime(bq_lac['event_date'])
+bq_lac['event_date_year_month'] = bq_lac['event_date'].dt.strftime('%Y-%m')
+bq_lac_grouped = bq_lac.groupby(['event_date_year_month','language'], as_index=False)['event_name'].count()
+bq_lac_grouped['key'] = bq_lac_grouped['event_date_year_month'] + bq_lac_grouped['language']
+# st.write("bq_lac_grouped:")
+# st.write(bq_lac_grouped.head(n = 100))
+
+# Create a Google Sheets connection object.
+credentials = service_account.Credentials.from_service_account_info(
+    st.secrets["gcp_service_account"],
+    scopes=[
+        "https://www.googleapis.com/auth/spreadsheets",
+    ]
+)
+conn = connect(credentials=credentials)
+# NOTE need to be able to associate users with the specific language / app they are using in order to calculate LAC...
+# at the moment I can only associate users with their BigQuery project which may consist of multiple languages / apps.
+
+# Perform SQL query on the Google Sheet.
+# Uses st.cache to only rerun when the query changes or after 10 min.
+@st.cache(ttl=600)
+def run_query(query):
+    rows = conn.execute(query, headers=1)
+    rows = rows.fetchall()
+    return rows
+
+sheet_url = st.secrets["Cost_gsheets_url"]
+rows = run_query(f'SELECT * FROM "{sheet_url}"')
+# st.write(rows)
+sheets_df = pd.DataFrame(columns = ['YearMonth', 'Country', 'Language', 'CostUSD', 'Type', 'Memo'],
+                            data = rows)
+# Convert date column to datetime, then sort by date
+# sheets_df['YearMonth'] = pd.to_datetime(sheets_df['YearMonth'])
+# sheets_df['YearMonth'] = sheets_df['YearMonth'].dt.date
+# sheets_df = sheets_df.sort_values(by=['YearMonth'])
+sheets_df = sheets_df.astype({
+    'CostUSD': 'float'
+})
+sheets_df['CostUSD'] = sheets_df['CostUSD'].round(decimals=2)
+# st.write("sheets_df:")
+# st.write(sheets_df)
+
+cost_df_grouped = sheets_df.groupby(['YearMonth','Language'], as_index=False)['CostUSD'].sum()
+cost_df_grouped['key'] = cost_df_grouped['YearMonth'] + cost_df_grouped['Language']
+bq_lac_merged = pd.merge(bq_lac_grouped, cost_df_grouped, how='left', on='key')
+
+# st.write("bq_lac_merged:")
+# st.write(bq_lac_merged.head(n=100))
+
+lac = []
+for i in bq_lac_merged.index:
+    lac.append(bq_lac_merged['CostUSD'][i]/bq_lac_merged['event_name'][i]) # event_name here is actually the # of new users
+
+bq_lac_merged['LAC'] = lac
+lac_df = bq_lac_merged[['event_date_year_month', 'language', 'event_name', 'CostUSD', 'LAC']]
+lac_df.rename(columns={'event_name': 'New User Count',
+                        'event_date_year_month': 'Year-Month',
+                        'language': 'Language',
+                        'LAC': 'Learner Acquisition Cost (USD)'
+                        }, inplace=True)
+
+st.write('Learner Acquisiton Cost Data:')
+st.write(lac_df.head(1000))
+
+# ---------------------------------------
 # Subtitle: Learner Acquisition Metrics
 st.header('Learner Acquisition Metrics')
 
 # Set up tabs for new user metrics
 tab1, tab2, tab3 = st.tabs(["New Users by Day", "New Users by Week", "New Users by Month"])
+
+# Calculate number of unique profiles
+# def calc_num_profiles():
+
+#     return null
 
 # --- New Users by Day ---
 daily_new_users_df = main_df[['date','newUsers']]
@@ -236,37 +430,7 @@ tab5.markdown("*Note that 'language' below is the language setting of the user's
 tab5.plotly_chart(new_users_by_lang_fig)
 
 # --- Learner Acquisition Cost ---
-# Create a Google Sheets connection object.
-credentials = service_account.Credentials.from_service_account_info(
-    st.secrets["gcp_service_account"],
-    scopes=[
-        "https://www.googleapis.com/auth/spreadsheets",
-    ]
-)
-conn = connect(credentials=credentials)
 
-# Perform SQL query on the Google Sheet.
-# Uses st.cache to only rerun when the query changes or after 10 min.
-@st.cache(ttl=600)
-def run_query(query):
-    rows = conn.execute(query, headers=1)
-    rows = rows.fetchall()
-    return rows
-
-sheet_url = st.secrets["Cost_gsheets_url"]
-rows = run_query(f'SELECT * FROM "{sheet_url}"')
-# st.write(rows)
-sheets_df = pd.DataFrame(columns = ['MonthYear', 'Country', 'Language', 'CostUSD', 'Type', 'Memo'],
-                            data = rows)
-# Convert date column to datetime, then sort by date
-sheets_df['MonthYear'] = pd.to_datetime(sheets_df['MonthYear'])
-sheets_df['MonthYear'] = sheets_df['MonthYear'].dt.date
-sheets_df = sheets_df.sort_values(by=['MonthYear'])
-sheets_df = sheets_df.astype({
-    'CostUSD': 'float'
-})
-sheets_df['CostUSD'] = sheets_df['CostUSD'].round(decimals=2)
-st.write(sheets_df)
 
 
 # Subtitle: Learner Engagement Metrics
