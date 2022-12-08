@@ -226,7 +226,7 @@ st.title('Curious Learning')
 
 # Set up sidebar with date picker
 select_date_range = st.sidebar.date_input(
-    "Select Learner Acquisition Date Range:",
+    "Select Learner Acquisition Date Range",
     ((pd.to_datetime("today").date() - pd.Timedelta(29, unit='D')),
         (pd.to_datetime("today").date() - pd.Timedelta(1, unit='D'))),
     key = 'date_range'
@@ -263,7 +263,7 @@ langs = sorted(lang_app_id_dict)
 
 if select_all:
     select_language = container.multiselect(
-        "Select Language(s):",
+        "Select Language(s)",
         langs,
         #["Ukrainian", "Swahili", "Arabic", "Marathi"],
         langs,
@@ -271,7 +271,7 @@ if select_all:
     )
 else:
     select_language = container.multiselect(
-        "Select Language(s):",
+        "Select Language(s)",
         langs,
         default = ["Ukrainian", "Swahili", "Arabic", "Marathi", "English (US)"],
         key = 'languages'
@@ -516,17 +516,141 @@ lac_df.rename(columns={'event_name': 'New User Count',
                         }, inplace=True)
 lac_df = lac_df.sort_values('Learner Acquisition Cost (USD)', ascending=False)
 
-st.write('Learner Acquisiton Cost:')
+st.write('Learner Acquisiton Cost')
 st.write(lac_df.head(1000))
 
-# --- BQ Reading Acquired ---
-st.write('Reading Acquired')
+# --- BQ Reading Acquisition ---
+st.write('Reading Acquisition')
+langs = st.session_state['languages']
+dates = pd.date_range(st.session_state['date_range'][0],pd.to_datetime('today')-pd.Timedelta(1, unit='D'),freq='d')
+
+ra_df = pd.DataFrame()
+for lang in st.session_state['languages']:
+    try:
+        app_id = lang_app_id_dict[lang]
+    except:
+        st.write("Could not find this language in lang_app_id_dict: " + str(lang))
+        continue
+    try:
+        bucket = appLang_bucket_dict[app_id]
+    except:
+        st.write("Could not find this id in appLang_bucket_dict: " + str(app_id))
+        continue
+    try:
+        property_id = app_propertyID_dict[bucket]
+    except:
+        st.write("Could not find this bucket in app_propertyID_dict: " + str(bucket))
+        continue
+    try:
+        bq_id = app_bqID_dict[bucket]
+    except:
+        st.write("Could not find this bucket in app_bqID_dict: " + str(bucket))
+        continue
+    # sql_query = f"""
+    #     SELECT event_date, id, SUM(end_level - start_level) AS levels_completed
+    #     FROM (
+    #         SELECT event_date, user_pseudo_id, app_info.id,
+    #             MIN(CAST(SUBSTR(params.value.string_value, (STRPOS(params.value.string_value, '_') + 1)) AS INT64)) - 1 AS start_level,
+    #             MAX(CAST(SUBSTR(params.value.string_value, (STRPOS(params.value.string_value, '_') + 1)) AS INT64)) AS end_level,
+    #         FROM `{bq_id}.analytics_{property_id}.events_20*` a,
+    #         UNNEST(a.event_params) AS params
+    #         WHERE parse_date('%y%m%d', _table_suffix) BETWEEN @start AND @end
+    #         AND event_name LIKE 'GamePlay'
+    #         AND params.key = 'action'
+    #         AND params.value.string_value LIKE 'LevelSuccess%'
+    #         AND app_info.id = @appID
+    #         --AND geo.country IN {'(' + ','.join(st.session_state['country_names']) + ')'}
+    #         GROUP BY event_date, user_pseudo_id, app_info.id
+    #         ORDER BY event_date
+    #     )
+    #     GROUP BY event_date, id
+    #     ORDER BY event_date, id
+    # """
+    sql_query = f"""
+        SELECT event_date, id, SUM(end_level - start_level) AS levels_completed
+        FROM (
+            SELECT event_date, user_pseudo_id, app_info.id,
+                MIN(CAST(SUBSTR(params.value.string_value, (STRPOS(params.value.string_value, '_') + 1)) AS INT64)) - 1 AS start_level,
+                MAX(CAST(SUBSTR(params.value.string_value, (STRPOS(params.value.string_value, '_') + 1)) AS INT64)) AS end_level,
+            FROM `{bq_id}.analytics_{property_id}.events_20*` a,
+            UNNEST(a.event_params) AS params
+            WHERE parse_date('%y%m%d', _table_suffix) BETWEEN @start AND @today
+            AND event_name LIKE 'GamePlay'
+            AND params.key = 'action'
+            AND params.value.string_value LIKE 'LevelSuccess%'
+            AND app_info.id = @appID
+            --AND geo.country IN {'(' + ','.join(st.session_state['country_names']) + ')'}
+            GROUP BY event_date, user_pseudo_id, app_info.id
+            ORDER BY event_date
+        ) 
+        AS lvl_data
+        RIGHT JOIN (
+            SELECT user_pseudo_id
+            FROM `{bq_id}.analytics_{property_id}.events_20*`
+            WHERE parse_date('%y%m%d', _table_suffix) BETWEEN @start AND @end
+            AND event_name = 'first_open'
+            AND app_info.id = @appID
+        ) AS cohort ON lvl_data.user_pseudo_id = cohort.user_pseudo_id
+        GROUP BY event_date, id
+        ORDER BY event_date, id
+    """
+    # st.write("start date: ", (st.session_state['date_range'][0]))
+    # st.write("end date: ", (pd.to_datetime("today").date()-pd.Timedelta(1, unit='D')))
+    query_parameters = [
+        bigquery.ScalarQueryParameter("start", "DATE", st.session_state['date_range'][0]),
+        bigquery.ScalarQueryParameter("end", "DATE", st.session_state['date_range'][1]), 
+        bigquery.ScalarQueryParameter("today", "DATE", pd.to_datetime("today").date()-pd.Timedelta(1, unit='D')), 
+        bigquery.ScalarQueryParameter("appID", "STRING", app_id)
+    ]
+    job_config = bigquery.QueryJobConfig(
+        query_parameters = query_parameters
+    )
+    rows_raw = client.query(sql_query, job_config=job_config)
+    rows = [dict(row) for row in rows_raw]
+    temp_df = pd.DataFrame(rows)
+    try:
+        temp_df.insert(1, "language", lang)
+    except:
+        continue
+    ra_df = pd.concat([ra_df, temp_df])
+    
+ra_df['event_date'] = pd.to_datetime(ra_df['event_date'])
+ra_df['event_date'] = ra_df['event_date'].dt.date
+# fig = go.Figure(data=go.Heatmap(
+#     z=z,
+#     x=dates,
+#     y=langs,
+# ))
+
+# fig.update_layour(
+#     title='Reading Acquisition of Learner Cohort Over Time'
+# )
+
+ra_fig_df = ra_df[['event_date', 'language', 'levels_completed']]
+# ra_fig__pivot_df = ra_fig_df.pivot(index='language', columns='event_date')['levels_completed'].fillna(0)
+# st.write(ra_fig_df)
+# fig = px.imshow(ra_fig_df,
+#                 x=ra_fig_df['event_date'],
+#                 y=ra_fig_df['language'])
+# st.plotly_chart(fig)
+
+ra_line_fig = px.area(ra_fig_df,
+                        x='event_date',
+                        y='levels_completed',
+                        color='language',
+                        line_group='language',
+                        title='Reading Acquisition of Learner Cohort Over Time')
+st.plotly_chart(ra_line_fig)
+
+
+# --- BQ Reading Acquisition Cost ---
+st.write('Reading Acquisition Cost')
 # Read data from levels gsheet
 levels_sheet_url = st.secrets["FeedTheMonsterLevels_gsheets_url"]
 rows = run_query(f'SELECT * FROM "{levels_sheet_url}"')
 levels_sheets_df = pd.DataFrame(columns = ['language', 'current_num_levels', 'num_levels', 'q1', 'q2', 'q3'],
                             data = rows)
-st.write(levels_sheets_df)
+# st.write(levels_sheets_df)
 # Query BQ for quartile data
 quart_df = pd.DataFrame()
 for lang in st.session_state['languages']:
@@ -586,7 +710,7 @@ for lang in st.session_state['languages']:
     query_parameters = [
         bigquery.ScalarQueryParameter("start", "DATE", st.session_state['date_range'][0]),
         # end date range is TODAY, not end of learner acquisition period. We're interested in all learning that has happened since the learner was acquired
-        bigquery.ScalarQueryParameter("end", "DATE", pd.to_datetime("today").date()), 
+        bigquery.ScalarQueryParameter("end", "DATE", pd.to_datetime("today").date()-pd.Timedelta(1, unit='D')), 
         bigquery.ScalarQueryParameter("appID", "STRING", app_id)
     ]
     job_config = bigquery.QueryJobConfig(
