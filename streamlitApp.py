@@ -489,7 +489,6 @@ fig = px.line(bq_daily_new_users,
 fig.update_traces(line=dict(width=3.5, dash='dot'))
 bq_daily_new_users_fig2.add_trace(fig.data[0])
 bq_daily_new_users_fig2.add_trace(fig.data[1])
-bq_daily_new_users_fig2.add_trace(fig.data[2])
 st.plotly_chart(bq_daily_new_users_fig2)
 
 # -- Learner Acquisition Cost --
