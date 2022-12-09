@@ -5,7 +5,9 @@
 import streamlit as st
 from google.oauth2 import service_account
 from google.cloud import bigquery
+#from shillelagh.backends.apsw.db import connect
 from gsheetsdb import connect
+from googleapiclient.discovery import build
 
 # https://learndataanalysis.org/source-code-automate-google-analytics-4-ga4-reporting-with-python-step-by-step-tutorial/
 # from jj_data_connector.ga4 import GA4Report, Metrics, Dimensions
@@ -224,77 +226,112 @@ lang_app_id_dict = {
 # Title
 st.title('Curious Learning')
 
-# Set up sidebar with date picker
-select_date_range = st.sidebar.date_input(
-    "Select Learner Acquisition Date Range",
-    ((pd.to_datetime("today").date() - pd.Timedelta(29, unit='D')),
-        (pd.to_datetime("today").date() - pd.Timedelta(1, unit='D'))),
-    key = 'date_range'
+# Create a Google Sheets connection object.
+credentials = service_account.Credentials.from_service_account_info(
+    st.secrets["gcp_service_account"],
+    scopes=[
+        "https://www.googleapis.com/auth/spreadsheets",
+    ]
 )
+conn = connect(credentials=credentials)
 
-container = st.sidebar.container()
-# select_all = st.sidebar.checkbox("Select All App Buckets", value=True)
- 
-# if select_all:
-#     select_bucket = container.multiselect(
-#         "Select App Bucket(s)",
-#         ["FTM - English", "FTM - Afrikaans", "FTM - AppBucket1", "FTM-AppBucket2",
-#             "FTM-AppBucket3", "FTM - French", "FTM - isiXhosa", "FTM - Kinayrwanda",
-#             "FTM - Oromo", "FTM - SePedi", "FTM - Somali", "FTM - SouthAfricanEnglish",
-#             "FTM - Spanish", "FTM - Swahili", "FTM - Zulu"],
-#         ["FTM - English", "FTM - Afrikaans", "FTM - AppBucket1", "FTM-AppBucket2",
-#             "FTM-AppBucket3", "FTM - French", "FTM - isiXhosa", "FTM - Kinayrwanda",
-#             "FTM - Oromo", "FTM - SePedi", "FTM - Somali", "FTM - SouthAfricanEnglish",
-#             "FTM - Spanish", "FTM - Swahili", "FTM - Zulu"],
-#         key = 'buckets'
-#     )
-# else:
-#     select_bucket = container.multiselect(
-#         "Select App Bucket(s)",
-#         ["FTM - English", "FTM - Afrikaans", "FTM - AppBucket1", "FTM-AppBucket2",
-#             "FTM-AppBucket3", "FTM - French", "FTM - isiXhosa", "FTM - Kinayrwanda",
-#             "FTM - Oromo", "FTM - SePedi", "FTM - Somali", "FTM - SouthAfricanEnglish",
-#             "FTM - Spanish", "FTM - Swahili", "FTM - Zulu"],
-#         key = 'buckets'
-#     )
+# Perform SQL query on the Google Sheet.
+# Uses st.cache to only rerun when the query changes or after 10 min.
+# @st.cache(ttl=600)
+def run_query(query):
+    rows = conn.execute(query, headers=1)
+    rows = rows.fetchall()
+    return rows
 
-select_all = st.sidebar.checkbox("Select All Languages", value=False)
-langs = sorted(lang_app_id_dict)
+cost_sheet_url = st.secrets["Cost_gsheets_url"]
+campaign_sheet_url = st.secrets["Campaign_gsheets_url"]
+cost_rows = run_query(f'SELECT * FROM "{cost_sheet_url}"')
+campaign_rows = run_query(f'SELECT * FROM "{campaign_sheet_url}"')
+cost_sheets_df = pd.DataFrame(columns = ['YearMonth', 'Campaign', 'CostUSD', 'Type', 'Memo'],
+                            data = cost_rows)
+campaign_sheets_df = pd.DataFrame(columns = ['Campaign Name', 'Language', 'Country', 'Start Date', 'End Date'],
+                            data = campaign_rows)
 
-if select_all:
-    select_language = container.multiselect(
-        "Select Language(s)",
-        langs,
-        #["Ukrainian", "Swahili", "Arabic", "Marathi"],
-        langs,
-        key = 'languages'
-    )
-else:
-    select_language = container.multiselect(
-        "Select Language(s)",
-        langs,
-        default = ["Ukrainian", "Swahili", "Arabic", "Marathi", "English (US)"],
-        key = 'languages'
-    )
+cost_sheets_df = cost_sheets_df.astype({
+    'CostUSD': 'float'
+})
+cost_sheets_df['CostUSD'] = cost_sheets_df['CostUSD'].round(decimals=2)
+# st.write("sheets_df:")
+# st.write(cost_sheets_df)
 
+
+# --- SIDEBAR ---
+toggle = st.sidebar.checkbox("Manual Selection Toggle", value=False)
+
+# --- Set up sidebar with date picker ---
 countries_df = pd.read_csv('countries.csv')
-
-container2 = st.sidebar.container()
-select_all2 = st.sidebar.checkbox("Select All Countries", value=True)
-
-if select_all2:
-    select_country = container2.multiselect(
-        "Filter by Country",
-        countries_df['name'],
-        countries_df['name'],
-        key = 'country_names'
+if toggle:
+    select_date_range = st.sidebar.date_input(
+        "Select Learner Acquisition Date Range",
+        ((pd.to_datetime("today").date() - pd.Timedelta(29, unit='D')),
+            (pd.to_datetime("today").date() - pd.Timedelta(1, unit='D'))),
+        key = 'date_range'
     )
+
+    container = st.sidebar.container()
+    select_all = st.sidebar.checkbox("Select All Languages", value=False)
+    langs = sorted(lang_app_id_dict)
+    if select_all:
+        select_language = container.multiselect(
+            "Select Language(s)",
+            langs,
+            #["Ukrainian", "Swahili", "Arabic", "Marathi"],
+            langs,
+            key = 'languages'
+        )
+    else:
+        select_language = container.multiselect(
+            "Select Language(s)",
+            langs,
+            default = ["Ukrainian"],#, "Swahili", "Arabic", "Marathi", "English (US)"],
+            key = 'languages'
+        )
+        
+    container2 = st.sidebar.container()
+    select_all2 = st.sidebar.checkbox("Select All Countries", value=True)
+    if select_all2:
+        select_country = container2.multiselect(
+            "Filter by Country",
+            countries_df['name'],
+            countries_df['name'],
+            key = 'country_names'
+        )
+    else:
+        select_country = container2.multiselect(
+            "Filter by Country",
+            countries_df['name'],
+            key = 'country_names'
+        )
+    date_range = st.session_state['date_range']
+    languages = st.session_state['languages']
+    countries = st.session_state['country_names']
 else:
-    select_country = container2.multiselect(
-    "Filter by Country",
-    countries_df['name'],
-    key = 'country_names'
-)
+    campaigns = campaign_sheets_df['Campaign Name']
+    select_campaign = st.sidebar.selectbox(
+        "Select Campaign",
+        campaigns,
+        index = 0,
+        key = 'campaign'
+    )
+
+    date_range = (pd.to_datetime(campaign_sheets_df[campaign_sheets_df['Campaign Name'] == select_campaign]['Start Date'].item()),
+                    pd.to_datetime(campaign_sheets_df[campaign_sheets_df['Campaign Name'] == select_campaign]['End Date'].item()))
+    date_range = (date_range[0].date(), (date_range[1].date() + pd.DateOffset(months=1) - pd.Timedelta(1, unit='D')).date())
+    languages = campaign_sheets_df[campaign_sheets_df['Campaign Name'] == select_campaign]['Language'].unique()
+    if campaign_sheets_df[campaign_sheets_df['Campaign Name'] == select_campaign]['Country'][0] == 'All':
+        countries = countries_df['name']
+    else:
+        countries = campaign_sheets_df[campaign_sheets_df['Campaign Name'] == select_campaign]['Country'].item()
+
+# st.write('date_range: ', date_range)
+# st.write('languages: ', languages)
+# st.write('countries: ', countries)
+# st.write('campaign: ', st.session_state['campaign'])
 
 # # Get Google Analytics credentials from secrets
 # ga_credentials = service_account.Credentials.from_service_account_info(
@@ -356,8 +393,7 @@ client = bigquery.Client(credentials=credentials)
 
 # Get BQ data for all selected language / app buckets
 bq_df = pd.DataFrame()
-for i in st.session_state['languages']:
-    #temp_df = pd.DataFrame()
+for i in languages:
     try:
         app_info_id = lang_app_id_dict[i]
     except:
@@ -387,8 +423,8 @@ for i in st.session_state['languages']:
         AND app_info.id = @appID
     """
     query_parameters = [
-        bigquery.ScalarQueryParameter("start", "DATE", st.session_state['date_range'][0]),
-        bigquery.ScalarQueryParameter("end", "DATE", st.session_state['date_range'][1]),
+        bigquery.ScalarQueryParameter("start", "DATE", date_range[0]), #st.session_state['date_range'][0]),
+        bigquery.ScalarQueryParameter("end", "DATE", date_range[1]),#st.session_state['date_range'][1]),
         bigquery.ScalarQueryParameter("appID", "STRING", app_info_id)
     ]
     job_config = bigquery.QueryJobConfig(
@@ -397,135 +433,118 @@ for i in st.session_state['languages']:
     rows_raw = client.query(sql_query, job_config=job_config)
     rows = [dict(row) for row in rows_raw]
     temp_df = pd.DataFrame(rows)
-    try:
-        temp_df.insert(1, "language", i)
-    except:
-        continue
+    if toggle:
+        try:
+            temp_df.insert(1, "language", i)
+        except:
+            continue
+    else:
+        try:
+            temp_df.insert(1, 'campaign', st.session_state['campaign'])
+        except:
+            continue
     bq_df = pd.concat([bq_df, temp_df], axis=0, ignore_index=True)
 
 # Filter to selected countries
-bq_df = bq_df[bq_df['country'].isin(st.session_state['country_names'])]
+bq_df = bq_df[bq_df['country'].isin(countries)]#st.session_state['country_names'])]
 bq_df = bq_df.sort_values(by='event_date')
 bq_df['event_date'] = pd.to_datetime(bq_df['event_date'])
 bq_df['event_date'] = bq_df['event_date'].dt.date
 
-# --- BQ Learner Acquisition ---
+# --- Learner Acquisition ---
+st.write("Learners Acquired between ", date_range[0], " and ", date_range[1], ": ", len(bq_df))
+
 bq_daily_new_users = bq_df[bq_df['event_name'] == 'first_open'].groupby(
     ['event_date'])['event_date'].count().reset_index(name='# New Users')
-bq_daily_new_users2 = bq_df[bq_df['event_name'] == 'first_open'].groupby(
-    ['event_date', 'language'])['event_date'].count().reset_index(name='# New Users')
+if toggle:
+    bq_daily_new_users2 = bq_df[bq_df['event_name'] == 'first_open'].groupby(
+        ['event_date', 'language'])['event_date'].count().reset_index(name='# New Users')
+else:
+    bq_daily_new_users2 = bq_df[bq_df['event_name'] == 'first_open'].groupby(
+        ['event_date', 'campaign'])['event_date'].count().reset_index(name='# New Users')
 bq_daily_new_users['7 Day Rolling Mean'] = bq_daily_new_users['# New Users'].rolling(7).mean()
 bq_daily_new_users['30 Day Rolling Mean'] = bq_daily_new_users['# New Users'].rolling(30).mean()
-# bq_daily_new_users_fig = px.line(bq_daily_new_users, x='event_date',
-#                                     y=['# New Users', '7 Day Rolling Mean', '30 Day Rolling Mean'],
-#                                     labels={
-#                                         "event_date": "Date (Day)",
-#                                         "# New Users": "New Users"},
-#                                     title="New User Count by Day")
-bq_daily_new_users_fig2 = px.area(bq_daily_new_users2, x='event_date',
-                                    y='# New Users',
-                                    color="language",
-                                    labels={
-                                        "event_date": "Date (Day)",
-                                        "# New Users": "New Users"},
-                                    line_group="language",
-                                    title="New User Count by Day")
+if toggle:
+    bq_daily_new_users_fig2 = px.area(bq_daily_new_users2, x='event_date',
+                                        y='# New Users',
+                                        color="language",
+                                        labels={
+                                            "event_date": "Date (Day)",
+                                            "# New Users": "New Users"},
+                                        line_group="language",
+                                        title="New User Count by Day")
+else:
+    bq_daily_new_users_fig2 = px.area(bq_daily_new_users2, x='event_date',
+                                        y='# New Users',
+                                        color="campaign",
+                                        labels={
+                                            "event_date": "Date (Day)",
+                                            "# New Users": "New Users"},
+                                        line_group="campaign",
+                                        title="New User Count by Day")
 fig = px.line(bq_daily_new_users,
     x='event_date',
-    y=['# New Users', '7 Day Rolling Mean', '30 Day Rolling Mean'],
-    labels={"# New Users": "Total New Users"}
+    y=['7 Day Rolling Mean', '30 Day Rolling Mean']
 )
 fig.update_traces(line=dict(width=3.5, dash='dot'))
 bq_daily_new_users_fig2.add_trace(fig.data[0])
 bq_daily_new_users_fig2.add_trace(fig.data[1])
 bq_daily_new_users_fig2.add_trace(fig.data[2])
-# st.plotly_chart(bq_daily_new_users_fig)
 st.plotly_chart(bq_daily_new_users_fig2)
 
-# BQ learner acquisition cost by month
-bq_lac = bq_df[['event_date', 'event_name', 'id', 'language', 'country']]
-# result = []
-# for i in bq_lac['id']:
-#     result.append({j for j in lang_app_id_dict if lang_app_id_dict[j]==i})
+# -- Learner Acquisition Cost --
+if toggle:
+    bq_lac = bq_df[['event_date', 'event_name', 'id', 'language', 'country']]
+    bq_lac['event_date'] = pd.to_datetime(bq_lac['event_date'])
+    bq_lac['event_date_year_month'] = bq_lac['event_date'].dt.strftime('%Y-%m')
+    bq_lac_grouped = bq_lac.groupby(['event_date_year_month','language', 'country'], as_index=False)['event_name'].count()
+    bq_lac_grouped['key'] = bq_lac_grouped['event_date_year_month'] + bq_lac_grouped['language'] + bq_lac_grouped['country']
+else:
+    bq_lac = bq_df[['event_date', 'event_name', 'campaign']]
+    bq_lac['event_date'] = pd.to_datetime(bq_lac['event_date'])
+    bq_lac['event_date_year_month'] = bq_lac['event_date'].dt.strftime('%Y-%m')
+    bq_lac_grouped = bq_lac.groupby(['event_date_year_month','campaign'], as_index=False)['event_name'].count()
+    bq_lac_grouped['key'] = bq_lac_grouped['event_date_year_month'] + bq_lac_grouped['campaign']
 
-# st.write("Result: ", result)
-# bq_lac['language'] = result
-# st.write("bq_lac", bq_lac.head())
-# bq_ref = bq_lac.groupby(['language'], as_index=False)
-# st.write(bq_ref.head())
-# st.write("bq_lac len = " + str(bq_lac.shape[0]))
-# st.write(bq_lac.head(n = 1000))
-
-bq_lac['event_date'] = pd.to_datetime(bq_lac['event_date'])
-bq_lac['event_date_year_month'] = bq_lac['event_date'].dt.strftime('%Y-%m')
-bq_lac_grouped = bq_lac.groupby(['event_date_year_month','language', 'country'], as_index=False)['event_name'].count()
-bq_lac_grouped['key'] = bq_lac_grouped['event_date_year_month'] + bq_lac_grouped['language'] + bq_lac_grouped['country']
-# st.write("bq_lac_grouped:")
-# st.write(bq_lac_grouped.head(n = 100))
-
-# Create a Google Sheets connection object.
-credentials = service_account.Credentials.from_service_account_info(
-    st.secrets["gcp_service_account"],
-    scopes=[
-        "https://www.googleapis.com/auth/spreadsheets",
-    ]
-)
-conn = connect(credentials=credentials)
-
-# Perform SQL query on the Google Sheet.
-# Uses st.cache to only rerun when the query changes or after 10 min.
-@st.cache(ttl=600)
-def run_query(query):
-    rows = conn.execute(query, headers=1)
-    rows = rows.fetchall()
-    return rows
-
-sheet_url = st.secrets["Cost_gsheets_url"]
-rows = run_query(f'SELECT * FROM "{sheet_url}"')
-sheets_df = pd.DataFrame(columns = ['YearMonth', 'Country', 'Language', 'CostUSD', 'Type', 'Memo'],
-                            data = rows)
-# Convert date column to datetime, then sort by date
-# sheets_df['YearMonth'] = pd.to_datetime(sheets_df['YearMonth'])
-# sheets_df['YearMonth'] = sheets_df['YearMonth'].dt.date
-# sheets_df = sheets_df.sort_values(by=['YearMonth'])
-sheets_df = sheets_df.astype({
-    'CostUSD': 'float'
-})
-sheets_df['CostUSD'] = sheets_df['CostUSD'].round(decimals=2)
-# st.write("sheets_df:")
-# st.write(sheets_df)
-
-cost_df_grouped = sheets_df.groupby(['YearMonth','Language','Country'], as_index=False)['CostUSD'].sum()
-cost_df_grouped['key'] = cost_df_grouped['YearMonth'] + cost_df_grouped['Language'] + cost_df_grouped['Country']
+if toggle:
+    cost_df_grouped = sheets_df.groupby(['YearMonth','Language','Country'], as_index=False)['CostUSD'].sum()
+    cost_df_grouped['key'] = cost_df_grouped['YearMonth'] + cost_df_grouped['Language'] + cost_df_grouped['Country']
+else:
+    cost_df_grouped = cost_sheets_df.groupby(['YearMonth','Campaign'], as_index=False)['CostUSD'].sum()
+    cost_df_grouped['key'] = cost_df_grouped['YearMonth'] + cost_df_grouped['Campaign']
 bq_lac_merged = pd.merge(bq_lac_grouped, cost_df_grouped, how='left', on='key')
-
-# st.write("bq_lac_merged:")
-# st.write(bq_lac_merged.head(n=100))
 
 lac = []
 for i in bq_lac_merged.index:
     lac.append(bq_lac_merged['CostUSD'][i]/bq_lac_merged['event_name'][i]) # event_name here is actually the # of new users
 
 bq_lac_merged['LAC'] = lac
-lac_df = bq_lac_merged[['event_date_year_month', 'language', 'country', 'event_name', 'CostUSD', 'LAC']]
-lac_df.rename(columns={'event_name': 'New User Count',
+if toggle:
+    lac_df = bq_lac_merged[['event_date_year_month', 'language', 'country', 'event_name', 'CostUSD', 'LAC']]
+    lac_df.rename(columns={'event_name': 'New User Count',
                         'event_date_year_month': 'Year-Month',
                         'language': 'Language',
                         'LAC': 'Learner Acquisition Cost (USD)',
                         'country': 'Country'
                         }, inplace=True)
+else:
+    lac_df = bq_lac_merged[['event_date_year_month', 'campaign', 'event_name', 'CostUSD', 'LAC']]
+    lac_df.rename(columns={'event_name': 'New User Count',
+                        'event_date_year_month': 'Year-Month',
+                        'campaign': 'Campaign',
+                        'LAC': 'Learner Acquisition Cost (USD)'
+                        }, inplace=True)
 lac_df = lac_df.sort_values('Learner Acquisition Cost (USD)', ascending=False)
 
 st.write('Learner Acquisiton Cost')
-st.write(lac_df.head(1000))
+st.write(lac_df)
 
 # --- BQ Reading Acquisition ---
 st.write('Reading Acquisition')
-langs = st.session_state['languages']
-dates = pd.date_range(st.session_state['date_range'][0],pd.to_datetime('today')-pd.Timedelta(1, unit='D'),freq='d')
+dates = pd.date_range(date_range[0],pd.to_datetime('today')-pd.Timedelta(1, unit='D'),freq='d')
 
 ra_df = pd.DataFrame()
-for lang in st.session_state['languages']:
+for lang in languages:
     try:
         app_id = lang_app_id_dict[lang]
     except:
@@ -554,24 +573,30 @@ for lang in st.session_state['languages']:
     #             MAX(CAST(SUBSTR(params.value.string_value, (STRPOS(params.value.string_value, '_') + 1)) AS INT64)) AS end_level,
     #         FROM `{bq_id}.analytics_{property_id}.events_20*` a,
     #         UNNEST(a.event_params) AS params
-    #         WHERE parse_date('%y%m%d', _table_suffix) BETWEEN @start AND @end
+    #         WHERE parse_date('%y%m%d', _table_suffix) BETWEEN @start AND @today
     #         AND event_name LIKE 'GamePlay'
     #         AND params.key = 'action'
     #         AND params.value.string_value LIKE 'LevelSuccess%'
     #         AND app_info.id = @appID
-    #         --AND geo.country IN {'(' + ','.join(st.session_state['country_names']) + ')'}
+    #         --AND geo.country IN {'(' + ','.join(countries) + ')'}
     #         GROUP BY event_date, user_pseudo_id, app_info.id
     #         ORDER BY event_date
-    #     )
+    #     ) 
+    #     AS lvl_data
+    #     RIGHT JOIN (
+    #         SELECT user_pseudo_id
+    #         FROM `{bq_id}.analytics_{property_id}.events_20*`
+    #         WHERE parse_date('%y%m%d', _table_suffix) BETWEEN @start AND @end
+    #         AND event_name = 'first_open'
+    #         AND app_info.id = @appID
+    #     ) AS cohort ON lvl_data.user_pseudo_id = cohort.user_pseudo_id
     #     GROUP BY event_date, id
     #     ORDER BY event_date, id
     # """
     sql_query = f"""
-        SELECT event_date, id, SUM(end_level - start_level) AS levels_completed
+        SELECT event_date, id, SUM(num_levels_completed) AS levels_completed
         FROM (
-            SELECT event_date, user_pseudo_id, app_info.id,
-                MIN(CAST(SUBSTR(params.value.string_value, (STRPOS(params.value.string_value, '_') + 1)) AS INT64)) - 1 AS start_level,
-                MAX(CAST(SUBSTR(params.value.string_value, (STRPOS(params.value.string_value, '_') + 1)) AS INT64)) AS end_level,
+            SELECT event_date, user_pseudo_id, app_info.id, COUNT(event_name) AS num_levels_completed
             FROM `{bq_id}.analytics_{property_id}.events_20*` a,
             UNNEST(a.event_params) AS params
             WHERE parse_date('%y%m%d', _table_suffix) BETWEEN @start AND @today
@@ -579,7 +604,7 @@ for lang in st.session_state['languages']:
             AND params.key = 'action'
             AND params.value.string_value LIKE 'LevelSuccess%'
             AND app_info.id = @appID
-            --AND geo.country IN {'(' + ','.join(st.session_state['country_names']) + ')'}
+            --AND geo.country IN {'(' + ','.join(countries) + ')'}
             GROUP BY event_date, user_pseudo_id, app_info.id
             ORDER BY event_date
         ) 
@@ -594,11 +619,9 @@ for lang in st.session_state['languages']:
         GROUP BY event_date, id
         ORDER BY event_date, id
     """
-    # st.write("start date: ", (st.session_state['date_range'][0]))
-    # st.write("end date: ", (pd.to_datetime("today").date()-pd.Timedelta(1, unit='D')))
     query_parameters = [
-        bigquery.ScalarQueryParameter("start", "DATE", st.session_state['date_range'][0]),
-        bigquery.ScalarQueryParameter("end", "DATE", st.session_state['date_range'][1]), 
+        bigquery.ScalarQueryParameter("start", "DATE", date_range[0]),
+        bigquery.ScalarQueryParameter("end", "DATE", date_range[1]),
         bigquery.ScalarQueryParameter("today", "DATE", pd.to_datetime("today").date()-pd.Timedelta(1, unit='D')), 
         bigquery.ScalarQueryParameter("appID", "STRING", app_id)
     ]
@@ -608,38 +631,37 @@ for lang in st.session_state['languages']:
     rows_raw = client.query(sql_query, job_config=job_config)
     rows = [dict(row) for row in rows_raw]
     temp_df = pd.DataFrame(rows)
-    try:
-        temp_df.insert(1, "language", lang)
-    except:
-        continue
+    if toggle:
+        try:
+            temp_df.insert(1, "language", lang)
+        except:
+            continue
+    else:
+        try:
+            temp_df.insert(1, 'campaign', st.session_state['campaign'])
+        except:
+            continue
     ra_df = pd.concat([ra_df, temp_df])
-    
+
 ra_df['event_date'] = pd.to_datetime(ra_df['event_date'])
 ra_df['event_date'] = ra_df['event_date'].dt.date
-# fig = go.Figure(data=go.Heatmap(
-#     z=z,
-#     x=dates,
-#     y=langs,
-# ))
 
-# fig.update_layour(
-#     title='Reading Acquisition of Learner Cohort Over Time'
-# )
-
-ra_fig_df = ra_df[['event_date', 'language', 'levels_completed']]
-# ra_fig__pivot_df = ra_fig_df.pivot(index='language', columns='event_date')['levels_completed'].fillna(0)
-# st.write(ra_fig_df)
-# fig = px.imshow(ra_fig_df,
-#                 x=ra_fig_df['event_date'],
-#                 y=ra_fig_df['language'])
-# st.plotly_chart(fig)
-
-ra_line_fig = px.area(ra_fig_df,
+if toggle:
+    ra_fig_df = ra_df[['event_date', 'language', 'levels_completed']]
+    ra_line_fig = px.area(ra_fig_df,
                         x='event_date',
                         y='levels_completed',
                         color='language',
                         line_group='language',
-                        title='Reading Acquisition of Learner Cohort Over Time')
+                        title='Engagement (# Levels Completed) by Day')
+else:
+    ra_fig_df = ra_df[['event_date', 'campaign', 'levels_completed']]
+    ra_line_fig = px.area(ra_fig_df,
+                        x='event_date',
+                        y='levels_completed',
+                        color='campaign',
+                        line_group='campaign',
+                        title='Engagement (# Levels Completed) by Day')
 st.plotly_chart(ra_line_fig)
 
 
@@ -650,10 +672,10 @@ levels_sheet_url = st.secrets["FeedTheMonsterLevels_gsheets_url"]
 rows = run_query(f'SELECT * FROM "{levels_sheet_url}"')
 levels_sheets_df = pd.DataFrame(columns = ['language', 'current_num_levels', 'num_levels', 'q1', 'q2', 'q3'],
                             data = rows)
-# st.write(levels_sheets_df)
+
 # Query BQ for quartile data
 quart_df = pd.DataFrame()
-for lang in st.session_state['languages']:
+for lang in languages:
     try:
         app_id = lang_app_id_dict[lang]
     except:
@@ -708,7 +730,7 @@ for lang in st.session_state['languages']:
         ORDER BY id, quartile
     """
     query_parameters = [
-        bigquery.ScalarQueryParameter("start", "DATE", st.session_state['date_range'][0]),
+        bigquery.ScalarQueryParameter("start", "DATE", date_range[0]),# st.session_state['date_range'][0]),
         # end date range is TODAY, not end of learner acquisition period. We're interested in all learning that has happened since the learner was acquired
         bigquery.ScalarQueryParameter("end", "DATE", pd.to_datetime("today").date()-pd.Timedelta(1, unit='D')), 
         bigquery.ScalarQueryParameter("appID", "STRING", app_id)
@@ -719,32 +741,74 @@ for lang in st.session_state['languages']:
     rows_raw = client.query(sql_query, job_config=job_config)
     rows = [dict(row) for row in rows_raw]
     temp_df = pd.DataFrame(rows)
-    try:
-        temp_df.insert(1, "language", lang)
-    except:
-        continue
+    if toggle:
+        try:
+            temp_df.insert(1, "language", lang)
+        except:
+            continue
+    else:
+        try:
+            temp_df.insert(1, "campaign", st.session_state['campaign'])
+        except:
+            continue
     quart_df = pd.concat([quart_df, temp_df])
 
-quart_df = quart_df[['language', 'quartile', 'num_learners', 'perc_learners', 'avg_level_reached']]
-quart_df.insert(5, 'reading_acquisition_cost', 'unknown')
-for lang in st.session_state['languages']:
+if toggle:
+    quart_df = quart_df[['language', 'quartile', 'num_learners', 'perc_learners', 'avg_level_reached']]
+    quart_df.insert(5, 'reading_acquisition_cost', 'unknown')
+    for lang in languages:
+        temp = {}
+        total_cost = (lac_df[lac_df['Language'] == lang]['CostUSD']).sum()
+        total_new_users = (lac_df[lac_df['Language'] == lang]['New User Count']).sum()
+        avg_lvl_q1 = quart_df[(quart_df['language'] == lang) & (quart_df['quartile'] == 'quartile_1')]['avg_level_reached'].item()
+        avg_lvl_q2 = quart_df[(quart_df['language'] == lang) & (quart_df['quartile'] == 'quartile_2')]['avg_level_reached'].item()
+        avg_lvl_q3 = quart_df[(quart_df['language'] == lang) & (quart_df['quartile'] == 'quartile_3')]['avg_level_reached'].item()
+        avg_lvl_q4 = quart_df[(quart_df['language'] == lang) & (quart_df['quartile'] == 'quartile_4')]['avg_level_reached'].item()
+        temp['q1'] = (total_cost / (total_new_users * avg_lvl_q1))
+        temp['q2'] = (total_cost / (total_new_users * avg_lvl_q2))
+        temp['q3'] = (total_cost / (total_new_users * avg_lvl_q3))
+        temp['q4'] = (total_cost / (total_new_users * avg_lvl_q4))
+        quart_df.loc[(quart_df['language'] == lang) & (quart_df['quartile'] == 'quartile_1'), 'reading_acquisition_cost'] = temp['q1']
+        quart_df.loc[(quart_df['language'] == lang) & (quart_df['quartile'] == 'quartile_2'), 'reading_acquisition_cost'] = temp['q2']
+        quart_df.loc[(quart_df['language'] == lang) & (quart_df['quartile'] == 'quartile_3'), 'reading_acquisition_cost'] = temp['q3']
+        quart_df.loc[(quart_df['language'] == lang) & (quart_df['quartile'] == 'quartile_4'), 'reading_acquisition_cost'] = temp['q4']
+else:
+    quart_df = quart_df[['campaign', 'quartile', 'num_learners', 'perc_learners', 'avg_level_reached']]
+    quart_df.insert(5, 'reading_acquisition_cost', 'unknown')
+    
     temp = {}
-    total_cost = (lac_df[lac_df['Language'] == lang]['CostUSD']).sum()
-    total_new_users = (lac_df[lac_df['Language'] == lang]['New User Count']).sum()
-    avg_lvl_q1 = quart_df[(quart_df['language'] == lang) & (quart_df['quartile'] == 'quartile_1')]['avg_level_reached'].item()
-    avg_lvl_q2 = quart_df[(quart_df['language'] == lang) & (quart_df['quartile'] == 'quartile_2')]['avg_level_reached'].item()
-    avg_lvl_q3 = quart_df[(quart_df['language'] == lang) & (quart_df['quartile'] == 'quartile_3')]['avg_level_reached'].item()
-    avg_lvl_q4 = quart_df[(quart_df['language'] == lang) & (quart_df['quartile'] == 'quartile_4')]['avg_level_reached'].item()
-    temp['q1'] = (total_cost / (total_new_users * avg_lvl_q1))
-    temp['q2'] = (total_cost / (total_new_users * avg_lvl_q2))
-    temp['q3'] = (total_cost / (total_new_users * avg_lvl_q3))
-    temp['q4'] = (total_cost / (total_new_users * avg_lvl_q4))
-    quart_df.loc[(quart_df['language'] == lang) & (quart_df['quartile'] == 'quartile_1'), 'reading_acquisition_cost'] = temp['q1']
-    quart_df.loc[(quart_df['language'] == lang) & (quart_df['quartile'] == 'quartile_2'), 'reading_acquisition_cost'] = temp['q2']
-    quart_df.loc[(quart_df['language'] == lang) & (quart_df['quartile'] == 'quartile_3'), 'reading_acquisition_cost'] = temp['q3']
-    quart_df.loc[(quart_df['language'] == lang) & (quart_df['quartile'] == 'quartile_4'), 'reading_acquisition_cost'] = temp['q4']
+    campaign = st.session_state['campaign']
+    total_cost = lac_df['CostUSD'].sum()
+    total_new_users = quart_df['num_learners'].sum()
+    lang = campaign_sheets_df.loc[campaign_sheets_df['Campaign Name'] == campaign, 'Language'].item()
+    total_levels = levels_sheets_df.loc[levels_sheets_df['language'] == lang, 'current_num_levels'].item()
+    q1_learners = quart_df.loc[(quart_df['quartile'] == 'quartile_1'), 'num_learners']
+    q2_learners = quart_df.loc[(quart_df['quartile'] == 'quartile_2'), 'num_learners']
+    q3_learners = quart_df.loc[(quart_df['quartile'] == 'quartile_3'), 'num_learners']
+    q4_learners = quart_df.loc[(quart_df['quartile'] == 'quartile_4'), 'num_learners']
+    avg_user_ra_q1 = quart_df[(quart_df['quartile'] == 'quartile_1')]['avg_level_reached'].item() / total_levels
+    avg_user_ra_q2 = quart_df[(quart_df['quartile'] == 'quartile_2')]['avg_level_reached'].item() / total_levels
+    avg_user_ra_q3 = quart_df[(quart_df['quartile'] == 'quartile_3')]['avg_level_reached'].item() / total_levels
+    avg_user_ra_q4 = quart_df[(quart_df['quartile'] == 'quartile_4')]['avg_level_reached'].item() / total_levels
+    quart_df.loc[(quart_df['quartile'] == 'quartile_1'), 'avg RA / learner'] = avg_user_ra_q1
+    quart_df.loc[(quart_df['quartile'] == 'quartile_2'), 'avg RA / learner'] = avg_user_ra_q2
+    quart_df.loc[(quart_df['quartile'] == 'quartile_3'), 'avg RA / learner'] = avg_user_ra_q3
+    quart_df.loc[(quart_df['quartile'] == 'quartile_4'), 'avg RA / learner'] = avg_user_ra_q4
+    quart_df.loc[(quart_df['quartile'] == 'quartile_1'), 'RA'] = avg_user_ra_q1 * q1_learners
+    quart_df.loc[(quart_df['quartile'] == 'quartile_2'), 'RA'] = avg_user_ra_q2 * q2_learners
+    quart_df.loc[(quart_df['quartile'] == 'quartile_3'), 'RA'] = avg_user_ra_q3 * q3_learners
+    quart_df.loc[(quart_df['quartile'] == 'quartile_4'), 'RA'] = avg_user_ra_q4 * q4_learners
+    temp['q1RAC'] = ((q1_learners / total_new_users) * total_cost) / quart_df.loc[(quart_df['quartile'] == 'quartile_1'), 'RA']
+    temp['q2RAC'] = ((q2_learners / total_new_users) * total_cost) / quart_df.loc[(quart_df['quartile'] == 'quartile_2'), 'RA']
+    temp['q3RAC'] = ((q3_learners / total_new_users) * total_cost) / quart_df.loc[(quart_df['quartile'] == 'quartile_3'), 'RA']
+    temp['q4RAC'] = ((q4_learners / total_new_users) * total_cost) / quart_df.loc[(quart_df['quartile'] == 'quartile_4'), 'RA']
+    quart_df.loc[(quart_df['quartile'] == 'quartile_1'), 'RAC'] = temp['q1RAC']
+    quart_df.loc[(quart_df['quartile'] == 'quartile_2'), 'RAC'] = temp['q2RAC']
+    quart_df.loc[(quart_df['quartile'] == 'quartile_3'), 'RAC'] = temp['q3RAC']
+    quart_df.loc[(quart_df['quartile'] == 'quartile_4'), 'RAC'] = temp['q4RAC']
 
-st.write(quart_df.head(n=1000))
+quart_df = quart_df[['campaign', 'quartile', 'num_learners', 'perc_learners', 'RA','avg_level_reached', 'avg RA / learner', 'RAC']]
+st.write(quart_df)
 
 # # ---------------------------------------
 # # Subtitle: Learner Acquisition Metrics
