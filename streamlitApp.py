@@ -323,10 +323,10 @@ else:
                     pd.to_datetime(campaign_sheets_df[campaign_sheets_df['Campaign Name'] == select_campaign]['End Date'].item()))
     date_range = (date_range[0].date(), (date_range[1].date() + pd.DateOffset(months=1) - pd.Timedelta(1, unit='D')).date())
     languages = campaign_sheets_df[campaign_sheets_df['Campaign Name'] == select_campaign]['Language'].unique()
-    if campaign_sheets_df[campaign_sheets_df['Campaign Name'] == select_campaign]['Country'][0] == 'All':
+    if campaign_sheets_df[campaign_sheets_df['Campaign Name'] == select_campaign]['Country'].item() == 'All':
         countries = countries_df['name']
     else:
-        countries = campaign_sheets_df[campaign_sheets_df['Campaign Name'] == select_campaign]['Country'].item()
+        countries = [campaign_sheets_df[campaign_sheets_df['Campaign Name'] == select_campaign]['Country'].item()]
 
 # st.write('date_range: ', date_range)
 # st.write('languages: ', languages)
@@ -484,7 +484,11 @@ else:
                                         title="New User Count by Day")
 fig = px.line(bq_daily_new_users,
     x='event_date',
-    y=['7 Day Rolling Mean', '30 Day Rolling Mean']
+    y=['7 Day Rolling Mean', '30 Day Rolling Mean'],
+    color_discrete_map={
+        '7 Day Rolling Mean': 'green',
+        '30 Day Rolling Mean': 'red'
+    }
 )
 fig.update_traces(line=dict(width=3.5, dash='dot'))
 bq_daily_new_users_fig2.add_trace(fig.data[0])
