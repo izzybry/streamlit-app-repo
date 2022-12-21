@@ -78,6 +78,7 @@ def get_campaign_metrics():
 st.title('Curious Learning')
 expander = st.expander('Definitions')
 expander.write('Learner Acquisition (LA) = number of users that have successfully completed at least one FTM level')
+expander.write('Learner Acquisition Date = the date a user completed level one of their FTM app')
 expander.write('Learner Acquisition Cost (LAC) = the cost (USD) of acquiring one learner')
 expander.write('Reading Acquisition (RA) = the average percentage of FTM levels completed across learner cohort')
 expander.write('Reading Acquisition Cost (RAC) = the cost (USD) of acquiring the average amount of reading across learner cohort')
@@ -107,6 +108,8 @@ for campaign in st.session_state['campaigns']:
     temp['campaign'] = campaign
     users_df = pd.concat([users_df, temp])
 
+st.write('Total Learners Acquired During Campaign(s): ', str(len(users_df)))
+
 daily_la = users_df.groupby(['campaign', 'LA_date'])['user_pseudo_id'].count().reset_index(name='Learners Acquired')
 if len(st.session_state['campaigns']) == 1:
     daily_la['7 Day Rolling Mean'] = daily_la['Learners Acquired'].rolling(7).mean()
@@ -115,7 +118,8 @@ if len(st.session_state['campaigns']) == 1:
         x='LA_date',
         y='Learners Acquired',
         color='campaign',
-        labels={"LA_date": "Acquisition Date"},
+        labels={"LA_date": "Acquisition Date",
+            'campaign': 'Campaign'},
         title="Learners Acquired by Day")
     rm_fig = px.line(daily_la,
         x='LA_date',
@@ -131,9 +135,23 @@ else:
         x='LA_date',
         y='Learners Acquired',
         color='campaign',
-        labels={"LA_date": "Acquisition Date"},
+        labels={'LA_date': "Acquisition Date",
+            'campaign': 'Campaign'},
         title="Learners Acquired by Day")
 st.plotly_chart(daily_la_fig)
+
+monthly_la = users_df
+monthly_la['LA_YM'] = (pd.to_datetime(monthly_la.LA_date)).dt.strftime('%Y-%m')
+monthly_la = users_df.groupby(['campaign', 'LA_YM'])['user_pseudo_id'].count().reset_index(name='Learners Acquired')
+monthly_la_fig = px.area(monthly_la,
+    x='LA_YM',
+    y='Learners Acquired',
+    color='campaign',
+    labels={'LA_YM': 'Acquisition Date (Month)',
+        'campaign': 'Campaign'},
+    title="Learners Acquired by Month"
+)
+st.plotly_chart(monthly_la_fig)
 
 country_la = users_df.groupby(['country'])['user_pseudo_id'].count().reset_index(name='Learners Acquired')
 country_fig = px.choropleth(country_la,
