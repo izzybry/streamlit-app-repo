@@ -77,10 +77,10 @@ def get_campaign_metrics():
 # --- UI ---
 st.title('Curious Learning')
 expander = st.expander('Definitions')
-expander.write('Learner Acquisition = number of users that have successfully completed at least one FTM level')
-expander.write('Learner Acquisition Cost = the cost (USD) of acquiring one learner')
-expander.write('Reading Acquisition = the average percentage of FTM levels completed across learner cohort')
-expander.write('Reading Acquisition Cost = the cost (USD) of acquiring the average amount of reading across learner cohort')
+expander.write('Learner Acquisition (LA) = number of users that have successfully completed at least one FTM level')
+expander.write('Learner Acquisition Cost (LAC) = the cost (USD) of acquiring one learner')
+expander.write('Reading Acquisition (RA) = the average percentage of FTM levels completed across learner cohort')
+expander.write('Reading Acquisition Cost (RAC) = the cost (USD) of acquiring the average amount of reading across learner cohort')
 
 ftm_campaigns = get_campaign_data()
 select_campaigns = st.sidebar.multiselect(
@@ -149,7 +149,7 @@ st.plotly_chart(country_fig)
 ftm_campaign_metrics = get_campaign_metrics()
 ftm_campaign_metrics = ftm_campaign_metrics[ftm_campaign_metrics['campaign_name'].isin(st.session_state['campaigns'])]
 ftm_campaign_metrics['camp_age'] = [(pd.to_datetime("today").date() - ftm_campaigns.loc[ftm_campaigns['Campaign Name'] == c, 'Start Date'].item()).days for c in ftm_campaign_metrics['campaign_name']]
-st.write('ftm_campaign_metrics', ftm_campaign_metrics)  
+# st.write('ftm_campaign_metrics', ftm_campaign_metrics)  
 lavslac = px.scatter(ftm_campaign_metrics,
     x='la',
     y='lac',
