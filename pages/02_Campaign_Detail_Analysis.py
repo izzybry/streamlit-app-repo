@@ -48,11 +48,32 @@ def get_campaign_data():
     return campaign_data
 
 @st.experimental_memo
-def get_user_data():
-    sql_query = f"""
-        SELECT * FROM `dataexploration-193817.user_data.ftm_users`
-    """
-    rows_raw = client.query(sql_query)
+def get_user_data(start_date, end_date, app, country):
+    start = start_date.strftime('%Y%m%d')
+    end = end_date.strftime('%Y%m%d')
+    if country == 'All':
+        sql_query = f"""
+            SELECT * FROM `dataexploration-193817.user_data.ftm_users`
+            WHERE LA_date BETWEEN @start AND @end
+            AND app_id = @app
+        """
+    else:
+        sql_query = f"""
+            SELECT * FROM `dataexploration-193817.user_data.ftm_users`
+            WHERE LA_date BETWEEN @start AND @end
+            AND app_id = @app
+            AND country = @country
+        """
+    query_parameters = [
+        bigquery.ScalarQueryParameter("start", "STRING", start),
+        bigquery.ScalarQueryParameter("end", "STRING", end),
+        bigquery.ScalarQueryParameter("app", "STRING", app),
+        bigquery.ScalarQueryParameter("country", "STRING", country),
+    ]
+    job_config = bigquery.QueryJobConfig(
+        query_parameters = query_parameters
+    )
+    rows_raw = client.query(sql_query, job_config = job_config)
     rows = [dict(row) for row in rows_raw]
     df = pd.DataFrame(rows)
     df['LA_date'] = (pd.to_datetime(df['LA_date'])).dt.date
@@ -119,20 +140,15 @@ select_campaigns = st.sidebar.selectbox(
 )
 
 # DAILY LEARNERS ACQUIRED
-ftm_users = get_user_data()
+campaign = st.session_state['campaign']
 ftm_apps = get_apps_data()
 users_df = pd.DataFrame()
-campaign = st.session_state['campaign']
 start_date = ftm_campaigns.loc[ftm_campaigns['Campaign Name'] == campaign, 'Start Date'].item()
 end_date = ftm_campaigns.loc[ftm_campaigns['Campaign Name'] == campaign, 'End Date'].item()
 language = ftm_campaigns.loc[ftm_campaigns['Campaign Name'] == campaign, 'Language'].item()
 app = ftm_apps.loc[ftm_apps['language'] == language, 'app_id'].item()
 country = ftm_campaigns.loc[ftm_campaigns['Campaign Name'] == campaign, 'Country'].item()
-# filter users_df to only include users acquired during selected campaign
-if country == 'All':
-    users_df = ftm_users[(ftm_users['LA_date'] >= start_date) & (ftm_users['LA_date'] <= end_date) & (ftm_users['app_id'] == app)]
-else:
-    users_df = ftm_users[(ftm_users['LA_date'] >= start_date) & (ftm_users['LA_date'] <= end_date) & (ftm_users['app_id'] == app) & (ftm_users['country'] == country)]
+users_df = get_user_data(start_date, end_date, app, country)
 st.write('Total Learners Acquired During Campaign: ', str(len(users_df)))
 
 daily_la = users_df.groupby(['LA_date'])['user_pseudo_id'].count().reset_index(name='Learners Acquired')

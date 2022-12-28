@@ -95,20 +95,75 @@ select_campaigns = st.sidebar.multiselect(
     key = 'campaigns'
 )
 
-# LEARNER & READING ACQUISITION COST
+# GANTT CHART
+ftm_campaigns = get_campaign_data()
+gantt = px.timeline(ftm_campaigns, x_start="Start Date", x_end="End Date", y="Campaign Name")
+st.plotly_chart(gantt)
+
+# LEADERBOARD
+col1, col2 = st.columns(2)
 ftm_campaign_metrics = get_campaign_metrics()
 ftm_campaign_metrics = ftm_campaign_metrics[ftm_campaign_metrics['campaign_name'].isin(st.session_state['campaigns'])]
+top_df = ftm_campaign_metrics.rename(columns={'campaign_name': 'Campaign', 'la': 'LA', 'ra': 'RA', 'rac': 'RAC', 'lac': 'LAC'})
+top_la = top_df.sort_values(by=['LA'], ascending=False).reset_index()
+top_la.index = top_la.index + 1
+col1.write('Top Campaigns by Highest LA:')
+col1.write(top_la[['Campaign', 'LA']].head(10))
+top_ra = top_df.sort_values(by=['RA'], ascending=False).reset_index()
+top_ra.index = top_ra.index + 1
+col2.write('Top Campaigns by Highest RA:')
+col2.write(top_ra[['Campaign', 'RA']].head(10))
+top_lac = top_df.sort_values(by=['LAC'], ascending=True).reset_index()
+top_lac.index = top_lac.index + 1
+col1.write('Top Campaigns by Lowest LAC:')
+col1.write(top_lac[['Campaign', 'LAC']].head(10))
+top_rac = top_df.sort_values(by=['RAC'], ascending=True).reset_index()
+top_rac.index = top_rac.index + 1
+col2.write('Top Campaigns by Lowest RAC:')
+col2.write(top_rac[['Campaign', 'RAC']].head(10))
+
+# LEARNER & READING ACQUISITION COST
 ftm_campaign_metrics['camp_age'] = [(ftm_campaigns.loc[ftm_campaigns['Campaign Name'] == c, 'End Date'].item() - ftm_campaigns.loc[ftm_campaigns['Campaign Name'] == c, 'Start Date'].item()).days for c in ftm_campaign_metrics['campaign_name']]
+lavsra = px.scatter(ftm_campaign_metrics,
+    x='ra',
+    y='la',
+    color='campaign_name',
+    size='camp_age',
+    labels={
+        'ra': 'RA',
+        'la': 'LA',
+        'camp_age': 'Campaign Age (Days)',
+        'campaign_name': 'Campaign'
+    },
+    title='LA vs RA' 
+)
+st.plotly_chart(lavsra)
+
+lacvsrac = px.scatter(ftm_campaign_metrics,
+    x='lac',
+    y='rac',
+    color='campaign_name',
+    size='camp_age',
+    labels={
+        'lac': 'LAC',
+        'rac': 'RAC',
+        'camp_age': 'Campaign Age (Days)',
+        'campaign_name': 'Campaign'
+    },
+    title='LAC vs RAC'    
+)
+st.plotly_chart(lacvsrac)
+
 lavslac = px.scatter(ftm_campaign_metrics,
     x='la',
     y='lac',
     color='campaign_name',
     size='camp_age',
     labels={
-        'la': 'Learners Acquired',
-        'lac': 'Learner Acquisition Cost',
+        'la': 'LA',
+        'lac': 'LAC',
         'camp_age': 'Campaign Age (Days)',
-        'campaign_name': 'Campaign Name'
+        'campaign_name': 'Campaign'
     },
     title='LA vs LAC'    
 )
@@ -120,11 +175,13 @@ ravsrac = px.scatter(ftm_campaign_metrics,
     color='campaign_name',
     size='camp_age',
     labels={
-        'ra': 'Reading Acquired',
-        'rac': 'Reading Acquisition Cost',
+        'ra': 'RA',
+        'rac': 'RAC',
         'camp_age': 'Campaign Age (Days)',
-        'campaign_name': 'Campaign Name'
+        'campaign_name': 'Campaign'
     },
     title='RA vs RAC'    
 )
 st.plotly_chart(ravsrac)
+
+
