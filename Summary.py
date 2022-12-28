@@ -14,8 +14,7 @@ import plotly
 import plotly.express as px
 import plotly.graph_objects as go
 
-# --- GLOBAL VARIABLES ---
-countries_df = pd.read_csv('countries.csv')
+st.set_page_config(page_title="Summary")
 
 # --- DATA ---
 # Create a Google Sheets connection object.
