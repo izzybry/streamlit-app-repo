@@ -33,6 +33,7 @@ def run_query(query):
     rows = rows.fetchall()
     return rows
 
+@st.experimental_memo
 def get_campaign_data():
     campaign_sheet_url = st.secrets["Campaign_gsheets_url"]
     campaign_rows = run_query(f'SELECT * FROM "{campaign_sheet_url}"')
@@ -46,6 +47,7 @@ def get_campaign_data():
     })
     return campaign_data
 
+@st.experimental_memo
 def get_user_data():
     sql_query = f"""
         SELECT * FROM `dataexploration-193817.user_data.ftm_users`
@@ -57,6 +59,7 @@ def get_user_data():
     df['max_lvl_date'] = (pd.to_datetime(df['max_lvl_date'])).dt.date
     return df
 
+@st.experimental_memo
 def get_apps_data():
     apps_sheet_url = st.secrets["ftm_apps_gsheets_url"]
     apps_rows = run_query(f'SELECT app_id, language, bq_property_id, bq_project_id, total_lvls FROM "{apps_sheet_url}"')
@@ -64,6 +67,7 @@ def get_apps_data():
         data = apps_rows)
     return apps_data
 
+@st.experimental_memo
 def get_ra_segments(campaign_data, app_data, user_data):
     df = pd.DataFrame(columns = ['segment', 'la', 'perc_la', 'ra', 'rac'])
     total_lvls = app_data['total_lvls'][0]

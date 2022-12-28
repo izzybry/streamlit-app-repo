@@ -33,6 +33,7 @@ def run_query(query):
     rows = rows.fetchall()
     return rows
 
+@st.experimental_memo
 def get_apps_data():
     apps_sheet_url = st.secrets["ftm_apps_gsheets_url"]
     apps_rows = run_query(f'SELECT app_id, language, bq_property_id, bq_project_id, total_lvls FROM "{apps_sheet_url}"')
