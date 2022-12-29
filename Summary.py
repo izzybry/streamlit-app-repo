@@ -97,6 +97,7 @@ select_campaigns = st.sidebar.multiselect(
 
 # GANTT CHART
 ftm_campaigns = get_campaign_data()
+ftm_campaigns = ftm_campaigns[ftm_campaigns['Campaign Name'].isin(st.session_state['campaigns'])]
 gantt = px.timeline(ftm_campaigns, x_start="Start Date", x_end="End Date", y="Campaign Name")
 st.plotly_chart(gantt)
 
@@ -108,19 +109,19 @@ top_df = ftm_campaign_metrics.rename(columns={'campaign_name': 'Campaign', 'la':
 top_la = top_df.sort_values(by=['LA'], ascending=False).reset_index()
 top_la.index = top_la.index + 1
 col1.write('Top Campaigns by Highest LA:')
-col1.write(top_la[['Campaign', 'LA']].head(10))
+col1.table(top_la[['Campaign', 'LA']].head(10))
 top_ra = top_df.sort_values(by=['RA'], ascending=False).reset_index()
 top_ra.index = top_ra.index + 1
 col2.write('Top Campaigns by Highest RA:')
-col2.write(top_ra[['Campaign', 'RA']].head(10))
+col2.table(top_ra[['Campaign', 'RA']].head(10))
 top_lac = top_df.sort_values(by=['LAC'], ascending=True).reset_index()
 top_lac.index = top_lac.index + 1
 col1.write('Top Campaigns by Lowest LAC:')
-col1.write(top_lac[['Campaign', 'LAC']].head(10))
+col1.table(top_lac[['Campaign', 'LAC']].head(10))
 top_rac = top_df.sort_values(by=['RAC'], ascending=True).reset_index()
 top_rac.index = top_rac.index + 1
 col2.write('Top Campaigns by Lowest RAC:')
-col2.write(top_rac[['Campaign', 'RAC']].head(10))
+col2.table(top_rac[['Campaign', 'RAC']].head(10))
 
 # LEARNER & READING ACQUISITION COST
 ftm_campaign_metrics['camp_age'] = [(ftm_campaigns.loc[ftm_campaigns['Campaign Name'] == c, 'End Date'].item() - ftm_campaigns.loc[ftm_campaigns['Campaign Name'] == c, 'Start Date'].item()).days for c in ftm_campaign_metrics['campaign_name']]

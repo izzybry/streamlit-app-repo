@@ -12,6 +12,7 @@ import json
 import plotly
 import plotly.express as px
 import plotly.graph_objects as go
+from millify import millify
 
 # --- DATA ---
 # Create a Google Sheets connection object.
@@ -124,6 +125,52 @@ def get_ra_segments(campaign_data, app_data, user_data):
     res['rac'] = campaign_data['Total Cost (USD)'][0] * res['la_perc'] / (res['ra'] * res['la'].sum())
     return res
 
+@st.experimental_memo
+def get_daily_activity(start_date, app, country, bq_id, property_id):
+    if country == 'All':
+        sql_query = f"""
+            SELECT event_date, COUNT(event_name) AS levels_played FROM `{bq_id}.analytics_{property_id}.events_20*`,
+            UNNEST(event_params) AS params
+            WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN @start AND @end
+            AND app_info.id = @app
+            AND event_name LIKE 'GamePlay'
+            AND params.key = 'action'
+            AND (params.value.string_value LIKE '%LevelSuccess%'
+            OR params.value.string_value LIKE '%LevelFail%')
+            GROUP BY event_date
+            ORDER BY event_date
+        """
+    else:
+        sql_query = f"""
+            SELECT event_date, COUNT(event_name) AS levels_played FROM `{bq_id}.analytics_{property_id}.events_20*`,
+            UNNEST(event_params) AS params
+            WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN @start AND @end
+            AND app_info.id = @app
+            AND geo.country = @country
+            AND event_name LIKE 'GamePlay'
+            AND params.key = 'action'
+            AND (params.value.string_value LIKE '%LevelSuccess%'
+            OR params.value.string_value LIKE '%LevelFail%')
+            GROUP BY event_date
+            ORDER BY event_date 
+        """
+    query_parameters = [
+        bigquery.ScalarQueryParameter("start", "DATE", start_date),
+        bigquery.ScalarQueryParameter("end", "DATE", pd.to_datetime("today").date()-pd.Timedelta(1, unit='D')),
+        bigquery.ScalarQueryParameter("app", "STRING", app),
+        bigquery.ScalarQueryParameter("country", "STRING", country),
+        bigquery.ScalarQueryParameter("bq_id", "STRING", bq_id),
+        bigquery.ScalarQueryParameter("property_id", "STRING", property_id)
+    ]
+    job_config = bigquery.QueryJobConfig(
+        query_parameters = query_parameters
+    )
+    rows_raw = client.query(sql_query, job_config = job_config)
+    rows = [dict(row) for row in rows_raw]
+    df = pd.DataFrame(rows)
+    df['event_date'] = (pd.to_datetime(df['event_date'])).dt.date
+    return df
+
 # --- UI ---
 st.title('Campaign Detail Analysis')
 expander = st.expander('Definitions')
@@ -139,22 +186,41 @@ select_campaigns = st.sidebar.selectbox(
     key = 'campaign'
 )
 
-# DAILY LEARNERS ACQUIRED
+# SET VARIABLES
 campaign = st.session_state['campaign']
 ftm_apps = get_apps_data()
-users_df = pd.DataFrame()
 start_date = ftm_campaigns.loc[ftm_campaigns['Campaign Name'] == campaign, 'Start Date'].item()
 end_date = ftm_campaigns.loc[ftm_campaigns['Campaign Name'] == campaign, 'End Date'].item()
 language = ftm_campaigns.loc[ftm_campaigns['Campaign Name'] == campaign, 'Language'].item()
 app = ftm_apps.loc[ftm_apps['language'] == language, 'app_id'].item()
 country = ftm_campaigns.loc[ftm_campaigns['Campaign Name'] == campaign, 'Country'].item()
+bq_id = ftm_apps.loc[ftm_apps['language'] == language, 'bq_project_id'].item()
+property_id = ftm_apps.loc[ftm_apps['language'] == language, 'bq_property_id'].item() 
+users_df = pd.DataFrame()
 users_df = get_user_data(start_date, end_date, app, country)
-st.write('Total Learners Acquired During Campaign: ', str(len(users_df)))
 
+# DAILY READING ACTIVITY
+daily_activity = get_daily_activity(start_date, app, country, bq_id, property_id)
+col1, col2 = st.columns(2)
+col1.metric('Total LA', millify(str(len(users_df))))
+col2.metric('Total Levels Played', millify(daily_activity['levels_played'].sum()))
+# daily_activity_fig = px.imshow(daily_activity)
+daily_activity_fig = px.bar(daily_activity,
+    x='event_date',
+    y='levels_played',
+    labels={
+        'event_date': 'Date',
+        'levels_played': '# Levels Played'
+    },
+    title='Daily Reading Activity'
+)
+st.plotly_chart(daily_activity_fig)
+
+# DAILY LEARNERS ACQUIRED
 daily_la = users_df.groupby(['LA_date'])['user_pseudo_id'].count().reset_index(name='Learners Acquired')
 daily_la['7 Day Rolling Mean'] = daily_la['Learners Acquired'].rolling(7).mean()
 daily_la['30 Day Rolling Mean'] = daily_la['Learners Acquired'].rolling(30).mean()
-daily_la_fig = px.area(daily_la,
+daily_la_fig = px.line(daily_la,
     x='LA_date',
     y='Learners Acquired',
     labels={"LA_date": "Acquisition Date"},

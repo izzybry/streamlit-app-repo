@@ -12,6 +12,7 @@ import json
 import plotly
 import plotly.express as px
 import plotly.graph_objects as go
+from millify import millify
 
 # --- DATA ---
 # Create a Google Sheets connection object.
@@ -103,6 +104,57 @@ def get_ra_segments(campagin_cost, app_data, user_data):
     res['rac'] = campaign_cost * res['la_perc'] / (res['ra'] * res['la'].sum())
     return res
 
+def get_daily_la_fig(daily_la):
+    daily_la_fig = px.line(daily_la,
+        x='LA_date',
+        y='Learners Acquired',
+        color='campaign',
+        labels={'LA_date': "Date",
+            'campaign': 'Campaign',
+            'Learners Acquired': 'LA'},
+        title="Daily LA")
+    return daily_la_fig
+
+def get_weekly_la_fig(daily_la):
+    daily_la['Weekly Rolling Mean'] = daily_la['Learners Acquired'].rolling(7).mean()
+    weekly_la_fig = px.line(daily_la,
+        x='LA_date',
+        y='Weekly Rolling Mean',
+        color='campaign',
+        labels={'LA_date': 'Date',
+            'campaign': 'Campaign',
+            'Weekly Rolling Mean': 'LA'},
+        title='Weekly LA')
+    return weekly_la_fig
+
+def get_monthly_la_fig(daily_la):
+    daily_la['Monthly Rolling Mean'] = daily_la['Learners Acquired'].rolling(30).mean()
+    monthly_la_fig = px.line(daily_la,
+        x='LA_date',
+        y='Monthly Rolling Mean',
+        color='campaign',
+        labels={'LA_date': 'Date',
+            'campaign': 'Campaign',
+            'Monthly Rolling Mean': 'LA'},
+        title='Monthly LA')
+    return monthly_la_fig
+
+@st.experimental_memo
+def get_normalized_start_df(daily_la):
+    res = daily_la
+    res['day'] = -1
+    camp = res['campaign'][0]
+    counter = 0
+    for index, row in res.iterrows():
+        if row['campaign'] == camp:
+            counter +=1
+            res['day'][index] = counter
+        else:
+            counter = 1
+            res['day'][index] = counter
+            camp = row['campaign']
+    return res
+
 # --- UI ---
 st.title('Multi Campaign Comparison')
 expander = st.expander('Definitions')
@@ -135,37 +187,24 @@ for campaign in st.session_state['campaigns']:
         temp = ftm_users[(ftm_users['LA_date'] >= start_date) & (ftm_users['LA_date'] <= end_date) & (ftm_users['app_id'] == app) & (ftm_users['country'] == country)]
     temp['campaign'] = campaign
     users_df = pd.concat([users_df, temp])
-st.write('Total Learners Acquired During Campaign(s): ', str(len(users_df)))
 
 daily_la = users_df.groupby(['campaign', 'LA_date'])['user_pseudo_id'].count().reset_index(name='Learners Acquired')
-if len(st.session_state['campaigns']) == 1:
-    daily_la['7 Day Rolling Mean'] = daily_la['Learners Acquired'].rolling(7).mean()
-    daily_la['30 Day Rolling Mean'] = daily_la['Learners Acquired'].rolling(30).mean()
-    daily_la_fig = px.area(daily_la,
-        x='LA_date',
-        y='Learners Acquired',
-        color='campaign',
-        labels={"LA_date": "Acquisition Date",
-            'campaign': 'Campaign'},
-        title="Learners Acquired by Day")
-    rm_fig = px.line(daily_la,
-        x='LA_date',
-        y=['7 Day Rolling Mean', '30 Day Rolling Mean'],
-        color_discrete_map={
-            '7 Day Rolling Mean': 'green',
-            '30 Day Rolling Mean': 'red'
-        })
-    daily_la_fig.add_trace(rm_fig.data[0])
-    daily_la_fig.add_trace(rm_fig.data[1])
-else:
-    daily_la_fig = px.line(daily_la,
-        x='LA_date',
-        y='Learners Acquired',
-        color='campaign',
-        labels={'LA_date': "Acquisition Date",
-            'campaign': 'Campaign'},
-        title="Learners Acquired by Day")
-st.plotly_chart(daily_la_fig)
+st.metric('Total LA', millify(str(len(users_df))))
+st.markdown('***')
+col1, col2 = st.columns(2)
+radio1 = col1.radio('Start Date Toggle', ('Original', 'Normalized Start'))
+radio = col2.radio('Rolling Mean Toggle', ('Daily LA', 'Weekly LA Rolling Mean', 'Monthly LA Rolling Mean'))
+if radio1 == 'Normalized Start':
+    daily_la = get_normalized_start_df(daily_la)
+    daily_la = daily_la.rename(columns={'LA_date':'orig_date', 'day': 'LA_date'})
+if radio == 'Daily LA':
+    la_fig = get_daily_la_fig(daily_la)
+elif radio == 'Weekly LA Rolling Mean':
+    la_fig = get_weekly_la_fig(daily_la)
+elif radio == 'Monthly LA Rolling Mean':
+    la_fig = get_monthly_la_fig(daily_la)
+st.plotly_chart(la_fig)
+st.markdown('***')
 
 ra_segs = pd.DataFrame()
 for campaign in st.session_state['campaigns']:
@@ -189,26 +228,3 @@ ra_segs_fig = px.bar(ra_segs,
     title='LA by RA Decile' 
 )
 st.plotly_chart(ra_segs_fig)
-
-# monthly_la = users_df
-# monthly_la['LA_YM'] = (pd.to_datetime(monthly_la.LA_date)).dt.strftime('%Y-%m')
-# monthly_la = users_df.groupby(['campaign', 'LA_YM'])['user_pseudo_id'].count().reset_index(name='Learners Acquired')
-# monthly_la_fig = px.bar(monthly_la,
-#     x='LA_YM',
-#     y='Learners Acquired',
-#     color='campaign',
-#     labels={'LA_YM': 'Acquisition Date (Month)',
-#         'campaign': 'Campaign'},
-#     title="Learners Acquired by Month"
-# )
-# st.plotly_chart(monthly_la_fig)
-
-# country_la = users_df.groupby(['country'])['user_pseudo_id'].count().reset_index(name='Learners Acquired')
-# country_fig = px.choropleth(country_la,
-#     locations='country',
-#     color='Learners Acquired',
-#     color_continuous_scale='Emrld',
-#     locationmode='country names',
-#     title='Learners Acquired by Country')
-# country_fig.update_layout(geo=dict(bgcolor= 'rgba(0,0,0,0)'))
-# st.plotly_chart(country_fig)
