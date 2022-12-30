@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # Izzy Bryant
 # Last updated Dec 2022
-# Summary.py
+# 01_Campaign_Comparison_Summary.py
 import streamlit as st
 from google.oauth2 import service_account
 from google.cloud import bigquery
@@ -13,7 +13,6 @@ import json
 import plotly
 import plotly.express as px
 import plotly.graph_objects as go
-from millify import millify
 
 # --- DATA ---
 # Create a Google Sheets connection object.
@@ -50,21 +49,6 @@ def get_campaign_data():
     return campaign_data
 
 @st.experimental_memo
-def get_annual_campaign_data():
-    ann_campaign_sheet_url = st.secrets["ann_camp_metrics_gsheets_url"]
-    year = pd.to_datetime("today").date().year
-    ann_camp_rows = run_query(f'''
-        SELECT * FROM "{ann_campaign_sheet_url}"
-    ''')
-    ann_camp_data = pd.DataFrame(columns = ['name', 'year', 'la', 'ra'],
-                            data = ann_camp_rows)
-    ann_camp_data = ann_camp_data.astype({
-        'year': 'int'
-    })
-    ann_camp_data = ann_camp_data[ann_camp_data['year'] < year+1]
-    return ann_camp_data
-
-@st.experimental_memo
 def get_user_data():
     sql_query = f"""
         SELECT * FROM `dataexploration-193817.user_data.ftm_users`
@@ -92,22 +76,109 @@ def get_campaign_metrics():
                             data = camp_metrics_rows)
     return camp_metrics_data
 
+
 # --- UI ---
-st.title('Annual Campaign Summary')
+st.title('Campaign Comparison Summary')
 expander = st.expander('Definitions')
 expander.write('Learner Acquisition (LA) = number of users that have successfully completed at least one FTM level')
 expander.write('Learner Acquisition Cost (LAC) = the cost (USD) of acquiring one learner')
 expander.write('Reading Acquisition (RA) = the average percentage of FTM levels completed per learner')
 expander.write('Reading Acquisition Cost (RAC) = the cost (USD) of acquiring the average amount of reading per learner')
 
-ann_camp_data = get_annual_campaign_data()
+ftm_campaigns = get_campaign_data()
 select_campaigns = st.sidebar.multiselect(
-    "Select Annual Campaign",
-    ann_camp_data['name'],
-    ann_camp_data['name'][len(ann_camp_data['name'])-1],
+    "Select Campaign(s)",
+    ftm_campaigns['Campaign Name'],
+    ftm_campaigns['Campaign Name'],
     key = 'campaigns'
 )
 
-ann_camp_data = ann_camp_data[ann_camp_data['name'].isin(st.session_state['campaigns'])]
-st.metric('Total LA', millify(ann_camp_data['la'].sum()))
-st.metric('Average RA', millify(ann_camp_data['ra'].mean(),precision=3))
+# GANTT CHART
+ftm_campaigns = get_campaign_data()
+ftm_campaigns = ftm_campaigns[ftm_campaigns['Campaign Name'].isin(st.session_state['campaigns'])]
+gantt = px.timeline(ftm_campaigns, x_start="Start Date", x_end="End Date", y="Campaign Name")
+st.plotly_chart(gantt)
+
+# LEADERBOARD
+col1, col2 = st.columns(2)
+ftm_campaign_metrics = get_campaign_metrics()
+ftm_campaign_metrics = ftm_campaign_metrics[ftm_campaign_metrics['campaign_name'].isin(st.session_state['campaigns'])]
+top_df = ftm_campaign_metrics.rename(columns={'campaign_name': 'Campaign', 'la': 'LA', 'ra': 'RA', 'rac': 'RAC', 'lac': 'LAC'})
+top_la = top_df.sort_values(by=['LA'], ascending=False).reset_index()
+top_la.index = top_la.index + 1
+col1.write('Top Campaigns by Highest LA:')
+col1.table(top_la[['Campaign', 'LA']].head(10))
+top_ra = top_df.sort_values(by=['RA'], ascending=False).reset_index()
+top_ra.index = top_ra.index + 1
+col2.write('Top Campaigns by Highest RA:')
+col2.table(top_ra[['Campaign', 'RA']].head(10))
+top_lac = top_df.sort_values(by=['LAC'], ascending=True).reset_index()
+top_lac.index = top_lac.index + 1
+col1.write('Top Campaigns by Lowest LAC:')
+col1.table(top_lac[['Campaign', 'LAC']].head(10))
+top_rac = top_df.sort_values(by=['RAC'], ascending=True).reset_index()
+top_rac.index = top_rac.index + 1
+col2.write('Top Campaigns by Lowest RAC:')
+col2.table(top_rac[['Campaign', 'RAC']].head(10))
+
+# LEARNER & READING ACQUISITION COST
+ftm_campaign_metrics['camp_age'] = [(ftm_campaigns.loc[ftm_campaigns['Campaign Name'] == c, 'End Date'].item() - ftm_campaigns.loc[ftm_campaigns['Campaign Name'] == c, 'Start Date'].item()).days for c in ftm_campaign_metrics['campaign_name']]
+lavsra = px.scatter(ftm_campaign_metrics,
+    x='ra',
+    y='la',
+    color='campaign_name',
+    size='camp_age',
+    labels={
+        'ra': 'RA',
+        'la': 'LA',
+        'camp_age': 'Campaign Age (Days)',
+        'campaign_name': 'Campaign'
+    },
+    title='LA vs RA' 
+)
+st.plotly_chart(lavsra)
+
+lacvsrac = px.scatter(ftm_campaign_metrics,
+    x='lac',
+    y='rac',
+    color='campaign_name',
+    size='camp_age',
+    labels={
+        'lac': 'LAC',
+        'rac': 'RAC',
+        'camp_age': 'Campaign Age (Days)',
+        'campaign_name': 'Campaign'
+    },
+    title='LAC vs RAC'    
+)
+st.plotly_chart(lacvsrac)
+
+lavslac = px.scatter(ftm_campaign_metrics,
+    x='la',
+    y='lac',
+    color='campaign_name',
+    size='camp_age',
+    labels={
+        'la': 'LA',
+        'lac': 'LAC',
+        'camp_age': 'Campaign Age (Days)',
+        'campaign_name': 'Campaign'
+    },
+    title='LA vs LAC'    
+)
+st.plotly_chart(lavslac)
+
+ravsrac = px.scatter(ftm_campaign_metrics,
+    x='ra',
+    y='rac',
+    color='campaign_name',
+    size='camp_age',
+    labels={
+        'ra': 'RA',
+        'rac': 'RAC',
+        'camp_age': 'Campaign Age (Days)',
+        'campaign_name': 'Campaign'
+    },
+    title='RA vs RAC'    
+)
+st.plotly_chart(ravsrac)

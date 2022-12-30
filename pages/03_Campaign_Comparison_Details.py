@@ -1,6 +1,6 @@
 # Izzy Bryant
 # Last updated Dec 2022
-# 03_Multi_Campaign_Comparison.py
+# 03_Campaign_Comparison_Details.py
 import streamlit as st
 from google.oauth2 import service_account
 from google.cloud import bigquery
@@ -156,7 +156,7 @@ def get_normalized_start_df(daily_la):
     return res
 
 # --- UI ---
-st.title('Multi Campaign Comparison')
+st.title('Campaign Comparison Details')
 expander = st.expander('Definitions')
 expander.write('Learner Acquisition (LA) = number of users that have successfully completed at least one FTM level')
 expander.write('Learner Acquisition Cost (LAC) = the cost (USD) of acquiring one learner')

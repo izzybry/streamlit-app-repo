@@ -1,6 +1,6 @@
 # Izzy Bryant
 # Last updated Dec 2022
-# 02_Campaign_Detail_Analysis.py
+# 02_Campaign_Details.py
 import streamlit as st
 from google.oauth2 import service_account
 from google.cloud import bigquery
@@ -172,7 +172,7 @@ def get_daily_activity(start_date, app, country, bq_id, property_id):
     return df
 
 # --- UI ---
-st.title('Campaign Detail Analysis')
+st.title('Campaign Details')
 expander = st.expander('Definitions')
 expander.write('Learner Acquisition (LA) = number of users that have successfully completed at least one FTM level')
 expander.write('Learner Acquisition Cost (LAC) = the cost (USD) of acquiring one learner')
