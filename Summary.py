@@ -258,6 +258,7 @@ for campaign in st.session_state['campaigns']:
     temp['campaign'] = campaign
     ra_segs = pd.concat([ra_segs, temp])
 ra_segs = ra_segs.sort_values(by=['campaign'])
+ra_segs['la_perc'] = round(ra_segs['la_perc'], 2)
 if len(st.session_state['campaigns']) == 0:
     ra_segs_fig = px.bar(ra_segs,
         x='seg',
