@@ -13,6 +13,7 @@ import plotly
 import plotly.express as px
 import plotly.graph_objects as go
 from millify import millify
+from plotly_calplot import calplot
 
 # --- DATA ---
 # Create a Google Sheets connection object.
@@ -126,6 +127,20 @@ def get_ra_segments(campaign_data, app_data, user_data):
     return res
 
 @st.experimental_memo
+def get_campaign_metrics():
+    camp_metrics_url = st.secrets["campaign_metrics_gsheets_url"]
+    camp_metrics_rows = run_query(f'SELECT * FROM "{camp_metrics_url}"')
+    camp_metrics_data = pd.DataFrame(columns = ['campaign_name', 'la', 'lac', 'ra', 'rac'],
+                            data = camp_metrics_rows)
+    camp_metrics_data = camp_metrics_data.astype({
+        'la': 'int',
+        'lac': 'float',
+        'ra': 'float',
+        'rac': 'float'
+    })
+    return camp_metrics_data
+
+@st.experimental_memo
 def get_daily_activity(start_date, app, country, bq_id, property_id):
     if country == 'All':
         sql_query = f"""
@@ -168,7 +183,7 @@ def get_daily_activity(start_date, app, country, bq_id, property_id):
     rows_raw = client.query(sql_query, job_config = job_config)
     rows = [dict(row) for row in rows_raw]
     df = pd.DataFrame(rows)
-    df['event_date'] = (pd.to_datetime(df['event_date'])).dt.date
+    df['event_date'] = pd.to_datetime(df['event_date'])
     return df
 
 # --- UI ---
@@ -213,23 +228,33 @@ bq_id = ftm_apps.loc[ftm_apps['language'] == language, 'bq_project_id'].item()
 property_id = ftm_apps.loc[ftm_apps['language'] == language, 'bq_property_id'].item() 
 users_df = pd.DataFrame()
 users_df = get_user_data(start_date, end_date, app, country)
+campaign_data = get_campaign_metrics()
 
 # DAILY READING ACTIVITY
 daily_activity = get_daily_activity(start_date, app, country, bq_id, property_id)
-col1, col2 = st.columns(2)
+col1, col2, col3, col4 = st.columns(4)
 col1.metric('Total LA', millify(str(len(users_df))))
-col2.metric('Total Levels Played', millify(daily_activity['levels_played'].sum()))
-# daily_activity_fig = px.imshow(daily_activity)
+col2.metric('Avg RA', millify(campaign_data.loc[campaign_data['campaign_name'] == campaign, 'ra'].item(),2))
+col3.metric('Avg LAC', millify(campaign_data.loc[campaign_data['campaign_name'] == campaign, 'lac'].item(),2))
+col4.metric('Avg RAC', millify(campaign_data.loc[campaign_data['campaign_name'] == campaign, 'rac'].item(),2))
+col1.metric('Total Levels Played', millify(daily_activity['levels_played'].sum()))
+
+st.markdown('''***
+##### Daily Reading Activity''')
+tab1, tab2 = st.tabs(['Timeseries', 'Heatmap'])
 daily_activity_fig = px.bar(daily_activity,
     x='event_date',
     y='levels_played',
     labels={
         'event_date': 'Date',
         'levels_played': '# Levels Played'
-    },
-    title='Daily Reading Activity'
-)
-st.plotly_chart(daily_activity_fig)
+    })
+tab1.plotly_chart(daily_activity_fig)
+
+da_fig = calplot(daily_activity, x='event_date', y='levels_played', dark_theme=True, gap=.5,
+    years_title=True, name='Levels Played', colorscale='blues', space_between_plots=0.2)
+tab2.plotly_chart(da_fig)
+st.markdown('***')
 
 # DAILY LEARNERS ACQUIRED
 daily_la = users_df.groupby(['LA_date'])['user_pseudo_id'].count().reset_index(name='Learners Acquired')

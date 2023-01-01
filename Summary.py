@@ -14,6 +14,7 @@ import plotly
 import plotly.express as px
 import plotly.graph_objects as go
 from millify import millify
+import numpy as np
 
 # --- DATA ---
 # Create a Google Sheets connection object.
@@ -143,6 +144,40 @@ def get_normalized_start_df(daily_la):
             camp = row['campaign']
     return res
 
+@st.experimental_memo
+def get_ra_segments(total_lvls, user_data):
+    df = pd.DataFrame(columns = ['segment', 'la', 'perc_la', 'ra', 'rac'])
+    seg = []
+    ra = []
+    for lvl in user_data['max_lvl']:
+        perc = lvl / total_lvls
+        ra.append(perc)
+        if perc < .1:
+            seg.append(.1)
+        elif .1 <= perc < .2:
+            seg.append(.2)
+        elif .2 <= perc < .3:
+            seg.append(.3)
+        elif .3 <= perc < .4:
+            seg.append(.4)
+        elif .4 <= perc < .5:
+            seg.append(.5)
+        elif .5 <= perc < .6:
+            seg.append(.6)
+        elif .6 <= perc < .7:
+            seg.append(.7)
+        elif .7 <= perc < .8:
+            seg.append(.8)
+        elif .8 <= perc < .9:
+            seg.append(.9)
+        else:
+            seg.append(1)
+    user_data['seg'] = seg
+    user_data['ra'] = ra
+    res = user_data.groupby('seg').agg(la=('user_pseudo_id','count'), ra=('ra','mean')).reset_index()
+    res['la_perc'] = res['la'] / res['la'].sum()
+    return res
+
 # --- UI ---
 st.title('Annual Campaign Summary')
 expander = st.expander('Definitions')
@@ -177,7 +212,8 @@ select_campaigns = st.sidebar.multiselect(
 ann_camp_data = ann_camp_data[ann_camp_data['name'].isin(st.session_state['campaigns'])]
 col1, col2 = st.columns(2)
 col1.metric('Total LA', millify(ann_camp_data['la'].sum()))
-col2.metric('Average RA', millify(ann_camp_data['ra'].mean(),precision=3))
+avg_ra = np.average(ann_camp_data['ra'], weights=ann_camp_data['la'])
+col2.metric('Avg RA (Weighted)', millify(avg_ra,precision=2))
 
 # DAILY LEARNERS ACQUIRED
 ftm_users = get_user_data()
@@ -211,3 +247,44 @@ country_fig = px.choropleth(country_la,
 country_fig.update_layout(geo=dict(bgcolor= 'rgba(0,0,0,0)'))
 country_fig.update_geos(fitbounds='locations', visible=False)
 st.plotly_chart(country_fig)
+
+# LA BY RA DECILE
+ftm_apps = get_apps_data()
+ftm_apps[ftm_apps['total_lvls'] == 0] = np.nan
+avg_total_levels = np.nanmean(ftm_apps['total_lvls'])
+ra_segs = pd.DataFrame()
+for campaign in st.session_state['campaigns']:
+    temp = get_ra_segments(avg_total_levels, users_df[users_df['campaign'] == campaign])
+    temp['campaign'] = campaign
+    ra_segs = pd.concat([ra_segs, temp])
+ra_segs = ra_segs.sort_values(by=['campaign'])
+if len(st.session_state['campaigns']) == 0:
+    ra_segs_fig = px.bar(ra_segs,
+        x='seg',
+        y='la',
+        labels={
+            'seg': 'RA Decile',
+            'la': 'LA',
+            'campaign': 'Campaign'
+        },
+        text_auto=True,
+        title='LA by RA Decile' 
+    )
+else:
+    ra_segs_fig = px.bar(ra_segs,
+        x='seg',
+        y='la_perc',
+        color='campaign',
+        barmode='group',
+        labels={
+            'seg': 'RA Decile',
+            'la': 'LA',
+            'la_perc': '% LA',
+            'campaign': 'Campaign'
+        },
+        text_auto=True,
+        title='LA by RA Decile' )
+st.plotly_chart(ra_segs_fig)
+st.caption('''The chart above displays LA by *RA Decile*.
+    RA Deciles represent the progression of reading acquisition split into ten percentage groups.
+    E.g. A learner that has completed 55% of the total FTM levels is included in the 0.5 RA Decile above.''')

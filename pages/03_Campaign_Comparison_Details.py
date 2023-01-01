@@ -13,6 +13,7 @@ import plotly
 import plotly.express as px
 import plotly.graph_objects as go
 from millify import millify
+import numpy as np
 
 # --- DATA ---
 # Create a Google Sheets connection object.
@@ -155,6 +156,20 @@ def get_normalized_start_df(daily_la):
             camp = row['campaign']
     return res
 
+@st.experimental_memo
+def get_campaign_metrics():
+    camp_metrics_url = st.secrets["campaign_metrics_gsheets_url"]
+    camp_metrics_rows = run_query(f'SELECT * FROM "{camp_metrics_url}"')
+    camp_metrics_data = pd.DataFrame(columns = ['campaign_name', 'la', 'lac', 'ra', 'rac'],
+                            data = camp_metrics_rows)
+    camp_metrics_data = camp_metrics_data.astype({
+        'la': 'int',
+        'lac': 'float',
+        'ra': 'float',
+        'rac': 'float'
+    })
+    return camp_metrics_data
+
 # --- UI ---
 st.title('Campaign Comparison Details')
 expander = st.expander('Definitions')
@@ -204,7 +219,13 @@ for campaign in st.session_state['campaigns']:
     users_df = pd.concat([users_df, temp])
 
 daily_la = users_df.groupby(['campaign', 'LA_date'])['user_pseudo_id'].count().reset_index(name='Learners Acquired')
-st.metric('Total LA', millify(str(len(users_df))))
+
+campaign_data = get_campaign_metrics()
+campaign_data = campaign_data[campaign_data['campaign_name'].isin(st.session_state['campaigns'])]
+col1, col2 = st.columns(2)
+col1.metric('Total LA', millify(str(len(users_df))))
+avg_ra = np.average(campaign_data['ra'], weights=campaign_data['la'])
+col2.metric('Avg RA (Weighted)', millify(avg_ra, precision=2))
 st.markdown('***')
 col1, col2 = st.columns(2)
 radio1 = col1.radio('Start Date Toggle', ('Original', 'Normalized Start'))
@@ -221,6 +242,7 @@ elif radio == 'Monthly LA Rolling Mean':
 st.plotly_chart(la_fig)
 st.markdown('***')
 
+# LA BY RA DECILE
 ra_segs = pd.DataFrame()
 for campaign in st.session_state['campaigns']:
     campaign_cost = ftm_campaigns.loc[ftm_campaigns['Campaign Name'] == campaign, 'Total Cost (USD)'].item()

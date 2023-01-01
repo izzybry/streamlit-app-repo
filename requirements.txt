@@ -10,3 +10,4 @@ plotly-express==0.4.0
 jj-data-connector @ git+https://github.com/DataSolveProblems/jj_data_connector.git@ea9ccde1fee7ad382f5e145f5a0bfc7e26a2341c
 gsheetsdb==0.1.13.1
 millify==0.1.1
+plotly-calplot==0.1.7
