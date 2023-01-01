@@ -100,8 +100,8 @@ def get_ra_segments(campagin_cost, app_data, user_data):
     user_data['seg'] = seg
     user_data['ra'] = ra
     res = user_data.groupby('seg').agg(la=('user_pseudo_id','count'), ra=('ra','mean')).reset_index()
-    res['la_perc'] = res['la'] / res['la'].sum()
-    res['rac'] = campaign_cost * res['la_perc'] / (res['ra'] * res['la'].sum())
+    res['la_perc'] = round(res['la'] / res['la'].sum(),2)
+    res['rac'] = round(campaign_cost * res['la_perc'] / (res['ra'] * res['la'].sum()),2)
     return res
 
 def get_daily_la_fig(daily_la):
@@ -158,10 +158,25 @@ def get_normalized_start_df(daily_la):
 # --- UI ---
 st.title('Campaign Comparison Details')
 expander = st.expander('Definitions')
-expander.write('Learner Acquisition (LA) = number of users that have successfully completed at least one FTM level')
-expander.write('Learner Acquisition Cost (LAC) = the cost (USD) of acquiring one learner')
-expander.write('Reading Acquisition (RA) = the average percentage of FTM levels completed per learner')
-expander.write('Reading Acquisition Cost (RAC) = the cost (USD) of acquiring the average amount of reading per learner')
+# CSS to inject contained in a string
+hide_table_row_index = """
+            <style>
+            thead tr th:first-child {display:none}
+            tbody th {display:none}
+            </style>
+            """
+# Inject CSS with Markdown
+st.markdown(hide_table_row_index, unsafe_allow_html=True)
+def_df = pd.DataFrame(
+    [
+        ['LA', 'Learner Acquisition', 'The number of users that have completed at least one FTM level'],
+        ['LAC', 'Learner Acquisition Cost', 'The cost (USD) of acquiring one learner'],
+        ['RA', 'Reading Acquisition', 'The average percentage of FTM levels completed per learner'],
+        ['RAC', 'Reading Acquisition Cost', 'The cost (USD) of acquiring the average amount of reading per learner']
+    ],
+    columns=['Acronym', 'Name', 'Definition']
+)
+expander.table(def_df)
 
 ftm_campaigns = get_campaign_data()
 select_campaigns = st.sidebar.multiselect(
@@ -208,10 +223,11 @@ st.markdown('***')
 
 ra_segs = pd.DataFrame()
 for campaign in st.session_state['campaigns']:
-    campaign_cost = ftm_campaigns.loc[ftm_campaigns['Campaign Name'] == campaign, 'Total Cost (USD)']
+    campaign_cost = ftm_campaigns.loc[ftm_campaigns['Campaign Name'] == campaign, 'Total Cost (USD)'].item()
     temp = get_ra_segments(campaign_cost, ftm_apps, users_df[users_df['campaign'] == campaign])
     temp['campaign'] = campaign
     ra_segs = pd.concat([ra_segs, temp])
+ra_segs = ra_segs.sort_values(by=['campaign'])
 
 ra_segs_fig = px.bar(ra_segs,
     x='seg',
@@ -223,8 +239,13 @@ ra_segs_fig = px.bar(ra_segs,
         'la_perc': '% LA',
         'seg': 'RA Decile',
         'rac': 'RAC (USD)',
-        'la': 'LA'
+        'la': 'LA',
+        'campaign': 'Campaign'
     },
+    text_auto=True,
     title='LA by RA Decile' 
 )
 st.plotly_chart(ra_segs_fig)
+st.caption('''The chart above displays LA by *RA Decile*.
+    RA Deciles represent the progression of reading acquisition split into ten percentage groups.
+    E.g. A learner that has completed 55% of the total FTM levels is included in the 0.5 RA Decile above.''')

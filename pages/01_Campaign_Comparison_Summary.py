@@ -74,16 +74,37 @@ def get_campaign_metrics():
     camp_metrics_rows = run_query(f'SELECT * FROM "{camp_metrics_url}"')
     camp_metrics_data = pd.DataFrame(columns = ['campaign_name', 'la', 'lac', 'ra', 'rac'],
                             data = camp_metrics_rows)
+    camp_metrics_data = camp_metrics_data.astype({
+        'la': 'int',
+        'lac': 'float',
+        'ra': 'float',
+        'rac': 'float'
+    })
     return camp_metrics_data
 
 
 # --- UI ---
 st.title('Campaign Comparison Summary')
 expander = st.expander('Definitions')
-expander.write('Learner Acquisition (LA) = number of users that have successfully completed at least one FTM level')
-expander.write('Learner Acquisition Cost (LAC) = the cost (USD) of acquiring one learner')
-expander.write('Reading Acquisition (RA) = the average percentage of FTM levels completed per learner')
-expander.write('Reading Acquisition Cost (RAC) = the cost (USD) of acquiring the average amount of reading per learner')
+# CSS to inject contained in a string
+hide_table_row_index = """
+            <style>
+            thead tr th:first-child {display:none}
+            tbody th {display:none}
+            </style>
+            """
+# Inject CSS with Markdown
+st.markdown(hide_table_row_index, unsafe_allow_html=True)
+def_df = pd.DataFrame(
+    [
+        ['LA', 'Learner Acquisition', 'The number of users that have completed at least one FTM level'],
+        ['LAC', 'Learner Acquisition Cost', 'The cost (USD) of acquiring one learner'],
+        ['RA', 'Reading Acquisition', 'The average percentage of FTM levels completed per learner'],
+        ['RAC', 'Reading Acquisition Cost', 'The cost (USD) of acquiring the average amount of reading per learner']
+    ],
+    columns=['Acronym', 'Name', 'Definition']
+)
+expander.table(def_df)
 
 ftm_campaigns = get_campaign_data()
 select_campaigns = st.sidebar.multiselect(
@@ -96,33 +117,48 @@ select_campaigns = st.sidebar.multiselect(
 # GANTT CHART
 ftm_campaigns = get_campaign_data()
 ftm_campaigns = ftm_campaigns[ftm_campaigns['Campaign Name'].isin(st.session_state['campaigns'])]
-gantt = px.timeline(ftm_campaigns, x_start="Start Date", x_end="End Date", y="Campaign Name")
+gantt = px.timeline(ftm_campaigns,
+    x_start='Start Date',
+    x_end='End Date',
+    y='Campaign Name',
+    color='Campaign Name',
+    labels={'Campaign Name': 'Campaign'},
+    title='Gantt Chart')
+gantt.update_layout(showlegend=False)
 st.plotly_chart(gantt)
 
 # LEADERBOARD
+st.markdown('***')
+st.subheader('Top 10 Leaderboard')
 col1, col2 = st.columns(2)
 ftm_campaign_metrics = get_campaign_metrics()
 ftm_campaign_metrics = ftm_campaign_metrics[ftm_campaign_metrics['campaign_name'].isin(st.session_state['campaigns'])]
 top_df = ftm_campaign_metrics.rename(columns={'campaign_name': 'Campaign', 'la': 'LA', 'ra': 'RA', 'rac': 'RAC', 'lac': 'LAC'})
 top_la = top_df.sort_values(by=['LA'], ascending=False).reset_index()
 top_la.index = top_la.index + 1
-col1.write('Top Campaigns by Highest LA:')
+col1.write('Highest LA')
 col1.table(top_la[['Campaign', 'LA']].head(10))
 top_ra = top_df.sort_values(by=['RA'], ascending=False).reset_index()
 top_ra.index = top_ra.index + 1
-col2.write('Top Campaigns by Highest RA:')
+col2.write('Highest RA')
 col2.table(top_ra[['Campaign', 'RA']].head(10))
 top_lac = top_df.sort_values(by=['LAC'], ascending=True).reset_index()
 top_lac.index = top_lac.index + 1
-col1.write('Top Campaigns by Lowest LAC:')
+col1.write('Lowest LAC')
 col1.table(top_lac[['Campaign', 'LAC']].head(10))
 top_rac = top_df.sort_values(by=['RAC'], ascending=True).reset_index()
 top_rac.index = top_rac.index + 1
-col2.write('Top Campaigns by Lowest RAC:')
+col2.write('Lowest RAC')
 col2.table(top_rac[['Campaign', 'RAC']].head(10))
+st.markdown('***')
 
 # LEARNER & READING ACQUISITION COST
+st.subheader('Reach & Impact')
+st.markdown('*Which campaigns have the greatest reach and learning impact?*')
 ftm_campaign_metrics['camp_age'] = [(ftm_campaigns.loc[ftm_campaigns['Campaign Name'] == c, 'End Date'].item() - ftm_campaigns.loc[ftm_campaigns['Campaign Name'] == c, 'Start Date'].item()).days for c in ftm_campaign_metrics['campaign_name']]
+ftm_campaign_metrics['ra'] = round(ftm_campaign_metrics['ra'],3)
+ftm_campaign_metrics['rac'] = round(ftm_campaign_metrics['rac'],3)
+ftm_campaign_metrics['lac'] = round(ftm_campaign_metrics['lac'],3)
 lavsra = px.scatter(ftm_campaign_metrics,
     x='ra',
     y='la',
@@ -136,8 +172,13 @@ lavsra = px.scatter(ftm_campaign_metrics,
     },
     title='LA vs RA' 
 )
+lavsra.add_shape(type='rect', xref='x domain', yref='y domain',
+    x0=0.5, x1=1, y0=0.5, y1=1, line=dict(color='LightGreen', width=3))
 st.plotly_chart(lavsra)
+st.markdown('***')
 
+st.subheader('Cost Analysis')
+st.markdown('*Which campaigns are the most cost effective?*')
 lacvsrac = px.scatter(ftm_campaign_metrics,
     x='lac',
     y='rac',
@@ -151,8 +192,10 @@ lacvsrac = px.scatter(ftm_campaign_metrics,
     },
     title='LAC vs RAC'    
 )
+lacvsrac.add_shape(type='rect', xref='x domain', yref='y domain',
+    x0=0, x1=0.5, y0=0, y1=0.5, line=dict(color='LightGreen', width=3))
 st.plotly_chart(lacvsrac)
-
+st.markdown('*Which campaigns are the most cost effective at reaching learners at scale?*')
 lavslac = px.scatter(ftm_campaign_metrics,
     x='la',
     y='lac',
@@ -166,19 +209,6 @@ lavslac = px.scatter(ftm_campaign_metrics,
     },
     title='LA vs LAC'    
 )
+lavslac.add_shape(type='rect', xref='x domain', yref='y domain',
+    x0=0.5, x1=1, y0=0, y1=0.5, line=dict(color='LightGreen', width=3))
 st.plotly_chart(lavslac)
-
-ravsrac = px.scatter(ftm_campaign_metrics,
-    x='ra',
-    y='rac',
-    color='campaign_name',
-    size='camp_age',
-    labels={
-        'ra': 'RA',
-        'rac': 'RAC',
-        'camp_age': 'Campaign Age (Days)',
-        'campaign_name': 'Campaign'
-    },
-    title='RA vs RAC'    
-)
-st.plotly_chart(ravsrac)

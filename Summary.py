@@ -92,22 +92,122 @@ def get_campaign_metrics():
                             data = camp_metrics_rows)
     return camp_metrics_data
 
+def get_daily_la_fig(daily_la):
+    daily_la_fig = px.line(daily_la,
+        x='LA_date',
+        y='LA',
+        color='campaign',
+        labels={'LA_date': "Date",
+            'campaign': 'Campaign',
+            'Learners Acquired': 'LA'},
+        title="Daily LA")
+    return daily_la_fig
+
+def get_weekly_la_fig(daily_la):
+    daily_la['Weekly Rolling Mean'] = daily_la['LA'].rolling(7).mean()
+    weekly_la_fig = px.line(daily_la,
+        x='LA_date',
+        y='Weekly Rolling Mean',
+        color='campaign',
+        labels={'LA_date': 'Date',
+            'campaign': 'Campaign',
+            'Weekly Rolling Mean': 'LA'},
+        title='Weekly LA')
+    return weekly_la_fig
+
+def get_monthly_la_fig(daily_la):
+    daily_la['Monthly Rolling Mean'] = daily_la['LA'].rolling(30).mean()
+    monthly_la_fig = px.line(daily_la,
+        x='LA_date',
+        y='Monthly Rolling Mean',
+        color='campaign',
+        labels={'LA_date': 'Date',
+            'campaign': 'Campaign',
+            'Monthly Rolling Mean': 'LA'},
+        title='Monthly LA')
+    return monthly_la_fig
+
+@st.experimental_memo
+def get_normalized_start_df(daily_la):
+    res = daily_la
+    res['day'] = -1
+    camp = res['campaign'][0]
+    counter = 0
+    for index, row in res.iterrows():
+        if row['campaign'] == camp:
+            counter +=1
+            res['day'][index] = counter
+        else:
+            counter = 1
+            res['day'][index] = counter
+            camp = row['campaign']
+    return res
+
 # --- UI ---
 st.title('Annual Campaign Summary')
 expander = st.expander('Definitions')
-expander.write('Learner Acquisition (LA) = number of users that have successfully completed at least one FTM level')
-expander.write('Learner Acquisition Cost (LAC) = the cost (USD) of acquiring one learner')
-expander.write('Reading Acquisition (RA) = the average percentage of FTM levels completed per learner')
-expander.write('Reading Acquisition Cost (RAC) = the cost (USD) of acquiring the average amount of reading per learner')
+# CSS to inject contained in a string
+hide_table_row_index = """
+            <style>
+            thead tr th:first-child {display:none}
+            tbody th {display:none}
+            </style>
+            """
+# Inject CSS with Markdown
+st.markdown(hide_table_row_index, unsafe_allow_html=True)
+def_df = pd.DataFrame(
+    [
+        ['LA', 'Learner Acquisition', 'The number of users that have completed at least one FTM level'],
+        ['LAC', 'Learner Acquisition Cost', 'The cost (USD) of acquiring one learner'],
+        ['RA', 'Reading Acquisition', 'The average percentage of FTM levels completed per learner'],
+        ['RAC', 'Reading Acquisition Cost', 'The cost (USD) of acquiring the average amount of reading per learner']
+    ],
+    columns=['Acronym', 'Name', 'Definition']
+)
+expander.table(def_df)
 
 ann_camp_data = get_annual_campaign_data()
 select_campaigns = st.sidebar.multiselect(
     "Select Annual Campaign",
     ann_camp_data['name'],
-    ann_camp_data['name'][len(ann_camp_data['name'])-1],
+    ann_camp_data['name'],#[len(ann_camp_data['name'])-1],
     key = 'campaigns'
 )
 
 ann_camp_data = ann_camp_data[ann_camp_data['name'].isin(st.session_state['campaigns'])]
-st.metric('Total LA', millify(ann_camp_data['la'].sum()))
-st.metric('Average RA', millify(ann_camp_data['ra'].mean(),precision=3))
+col1, col2 = st.columns(2)
+col1.metric('Total LA', millify(ann_camp_data['la'].sum()))
+col2.metric('Average RA', millify(ann_camp_data['ra'].mean(),precision=3))
+
+# DAILY LEARNERS ACQUIRED
+ftm_users = get_user_data()
+users_df = ftm_users[pd.to_datetime(ftm_users['LA_date']).dt.year.between(ann_camp_data['year'].min(), ann_camp_data['year'].max(), inclusive = True)]
+users_df['campaign'] = users_df['LA_date'].apply(lambda x: 'FTM_' + str(x.year))
+daily_la = users_df.groupby(['campaign', 'LA_date'])['user_pseudo_id'].count().reset_index(name='LA')
+st.markdown('***')
+col3, col4 = st.columns(2)
+radio1 = col3.radio('Start Date Toggle', ('Original', 'Normalized Start'))
+radio = col4.radio('Rolling Mean Toggle', ('Daily LA', 'Weekly LA Rolling Mean', 'Monthly LA Rolling Mean'))
+if radio1 == 'Normalized Start':
+    daily_la = get_normalized_start_df(daily_la)
+    daily_la = daily_la.rename(columns={'LA_date':'orig_date', 'day': 'LA_date'})
+if radio == 'Daily LA':
+    la_fig = get_daily_la_fig(daily_la)
+elif radio == 'Weekly LA Rolling Mean':
+    la_fig = get_weekly_la_fig(daily_la)
+elif radio == 'Monthly LA Rolling Mean':
+    la_fig = get_monthly_la_fig(daily_la)
+st.plotly_chart(la_fig)
+st.markdown('***')
+
+# MAP
+country_la = users_df.groupby(['country'])['user_pseudo_id'].count().reset_index(name='LA')
+country_fig = px.choropleth(country_la,
+    locations='country',
+    color='LA',
+    color_continuous_scale='bluered',
+    locationmode='country names',
+    title='LA by Country')
+country_fig.update_layout(geo=dict(bgcolor= 'rgba(0,0,0,0)'))
+country_fig.update_geos(fitbounds='locations', visible=False)
+st.plotly_chart(country_fig)

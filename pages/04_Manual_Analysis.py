@@ -157,10 +157,26 @@ def get_daily_activity(start_date, apps, countries, bq_ids, property_ids):
 # --- UI ---
 st.title('Manual Analysis')
 expander = st.expander('Definitions')
-expander.write('Learner Acquisition (LA) = number of users that have successfully completed at least one FTM level')
-expander.write('Learner Acquisition Cost (LAC) = the cost (USD) of acquiring one learner')
-expander.write('Reading Acquisition (RA) = the average percentage of FTM levels completed per learner')
-expander.write('Reading Acquisition Cost (RAC) = the cost (USD) of acquiring the average amount of reading per learner')
+# CSS to inject contained in a string
+hide_table_row_index = """
+            <style>
+            thead tr th:first-child {display:none}
+            tbody th {display:none}
+            </style>
+            """
+# Inject CSS with Markdown
+st.markdown(hide_table_row_index, unsafe_allow_html=True)
+def_df = pd.DataFrame(
+    [
+        ['LA', 'Learner Acquisition', 'The number of users that have completed at least one FTM level'],
+        ['LAC', 'Learner Acquisition Cost', 'The cost (USD) of acquiring one learner'],
+        ['RA', 'Reading Acquisition', 'The average percentage of FTM levels completed per learner'],
+        ['RAC', 'Reading Acquisition Cost', 'The cost (USD) of acquiring the average amount of reading per learner']
+    ],
+    columns=['Acronym', 'Name', 'Definition']
+)
+expander.table(def_df)
+
 select_date_range = st.sidebar.date_input(
     'Select date range',
     (pd.to_datetime("today").date() - pd.Timedelta(30, unit='d'),

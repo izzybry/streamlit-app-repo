@@ -122,7 +122,7 @@ def get_ra_segments(campaign_data, app_data, user_data):
     user_data['ra'] = ra
     res = user_data.groupby('seg').agg(la=('user_pseudo_id','count'), ra=('ra','mean')).reset_index()
     res['la_perc'] = res['la'] / res['la'].sum()
-    res['rac'] = campaign_data['Total Cost (USD)'][0] * res['la_perc'] / (res['ra'] * res['la'].sum())
+    res['rac'] = round(campaign_data['Total Cost (USD)'][0] * res['la_perc'] / (res['ra'] * res['la'].sum()),2)
     return res
 
 @st.experimental_memo
@@ -174,10 +174,25 @@ def get_daily_activity(start_date, app, country, bq_id, property_id):
 # --- UI ---
 st.title('Campaign Details')
 expander = st.expander('Definitions')
-expander.write('Learner Acquisition (LA) = number of users that have successfully completed at least one FTM level')
-expander.write('Learner Acquisition Cost (LAC) = the cost (USD) of acquiring one learner')
-expander.write('Reading Acquisition (RA) = the average percentage of FTM levels completed per learner')
-expander.write('Reading Acquisition Cost (RAC) = the cost (USD) of acquiring the average amount of reading per learner')
+# CSS to inject contained in a string
+hide_table_row_index = """
+            <style>
+            thead tr th:first-child {display:none}
+            tbody th {display:none}
+            </style>
+            """
+# Inject CSS with Markdown
+st.markdown(hide_table_row_index, unsafe_allow_html=True)
+def_df = pd.DataFrame(
+    [
+        ['LA', 'Learner Acquisition', 'The number of users that have completed at least one FTM level'],
+        ['LAC', 'Learner Acquisition Cost', 'The cost (USD) of acquiring one learner'],
+        ['RA', 'Reading Acquisition', 'The average percentage of FTM levels completed per learner'],
+        ['RAC', 'Reading Acquisition Cost', 'The cost (USD) of acquiring the average amount of reading per learner']
+    ],
+    columns=['Acronym', 'Name', 'Definition']
+)
+expander.table(def_df)
 ftm_campaigns = get_campaign_data()
 select_campaigns = st.sidebar.selectbox(
     "Select Campaign",
@@ -223,8 +238,9 @@ daily_la['30 Day Rolling Mean'] = daily_la['Learners Acquired'].rolling(30).mean
 daily_la_fig = px.line(daily_la,
     x='LA_date',
     y='Learners Acquired',
-    labels={"LA_date": "Acquisition Date"},
-    title="Learners Acquired by Day")
+    labels={"LA_date": "Date",
+        'Learners Acquired': 'LA'},
+    title="Daily LA")
 rm_fig = px.line(daily_la,
     x='LA_date',
     y=['7 Day Rolling Mean', '30 Day Rolling Mean'],
@@ -236,30 +252,31 @@ daily_la_fig.add_trace(rm_fig.data[0])
 daily_la_fig.add_trace(rm_fig.data[1])
 st.plotly_chart(daily_la_fig)
 
-country_la = users_df.groupby(['country'])['user_pseudo_id'].count().reset_index(name='Learners Acquired')
+country_la = users_df.groupby(['country'])['user_pseudo_id'].count().reset_index(name='LA')
 country_fig = px.choropleth(country_la,
     locations='country',
-    color='Learners Acquired',
-    color_continuous_scale='Emrld',
+    color='LA',
+    color_continuous_scale='bluered',
     locationmode='country names',
-    title='Learners Acquired by Country')
+    title='LA by Country')
 country_fig.update_layout(geo=dict(bgcolor= 'rgba(0,0,0,0)'))
 st.plotly_chart(country_fig)
-
-# DAILY READING ACQUIRED
 
 # READING ACQUISITION DECILES
 ra_segs = get_ra_segments(ftm_campaigns, ftm_apps, users_df)
 ra_segs_fig = px.bar(ra_segs,
     x='seg',
-    y='la_perc',
-    hover_data=['rac', 'la'],
+    y='la',
+    hover_data=['rac'],
     labels={
-        'la_perc': '% LA',
         'seg': 'RA Decile',
         'rac': 'RAC (USD)',
         'la': 'LA'
     },
+    text_auto=True,
     title='LA by RA Decile' 
 )
 st.plotly_chart(ra_segs_fig)
+st.caption('''The chart above displays LA by *RA Decile*.
+    RA Deciles represent the progression of reading acquisition split into ten percentage groups.
+    E.g. A learner that has completed 55% of the total FTM levels is included in the 0.5 RA Decile above.''')
