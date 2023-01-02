@@ -105,39 +105,128 @@ def get_ra_segments(campagin_cost, app_data, user_data):
     res['rac'] = round(campaign_cost * res['la_perc'] / (res['ra'] * res['la'].sum()),2)
     return res
 
-def get_daily_la_fig(daily_la):
-    daily_la_fig = px.line(daily_la,
-        x='LA_date',
-        y='Learners Acquired',
-        color='campaign',
-        labels={'LA_date': "Date",
-            'campaign': 'Campaign',
-            'Learners Acquired': 'LA'},
-        title="Daily LA")
+# def get_daily_la_fig(daily_la):
+#     daily_la_fig = px.line(daily_la,
+#         x='LA_date',
+#         y='Learners Acquired',
+#         color='campaign',
+#         labels={'LA_date': "Date",
+#             'campaign': 'Campaign',
+#             'Learners Acquired': 'LA'},
+#         title="Daily LA")
+#     return daily_la_fig
+
+# def get_weekly_la_fig(daily_la):
+#     daily_la['Weekly Rolling Mean'] = daily_la['Learners Acquired'].rolling(7).mean()
+#     weekly_la_fig = px.line(daily_la,
+#         x='LA_date',
+#         y='Weekly Rolling Mean',
+#         color='campaign',
+#         labels={'LA_date': 'Date',
+#             'campaign': 'Campaign',
+#             'Weekly Rolling Mean': 'LA'},
+#         title='Weekly LA')
+#     return weekly_la_fig
+
+# def get_monthly_la_fig(daily_la):
+#     daily_la['Monthly Rolling Mean'] = daily_la['Learners Acquired'].rolling(30).mean()
+#     monthly_la_fig = px.line(daily_la,
+#         x='LA_date',
+#         y='Monthly Rolling Mean',
+#         color='campaign',
+#         labels={'LA_date': 'Date',
+#             'campaign': 'Campaign',
+#             'Monthly Rolling Mean': 'LA'},
+#         title='Monthly LA')
+#     return monthly_la_fig
+
+def get_daily_la_fig(daily_la, norm):
+    if norm == True:
+        daily_la_fig = px.line(daily_la,
+            x='LA_date',
+            y='LA',
+            color='campaign',
+            labels={'LA_date': 'Day',
+                'campaign': 'Campaign',
+                'Learners Acquired': 'LA'},
+            title="Daily LA")
+        daily_la_fig.update_xaxes(
+            tickmode='array',
+            tickvals = np.arange(0, len(daily_la['LA_date']), 30),
+            ticktext=np.arange(0, 13, 1)
+        )
+        daily_la_fig.update_layout(
+            xaxis_title='Date (Month)'
+        )
+    else:
+        daily_la_fig = px.line(daily_la,
+            x='LA_date',
+            y='LA',
+            color='campaign',
+            labels={'LA_date': 'Date',
+                'campaign': 'Campaign',
+                'Learners Acquired': 'LA'},
+            title='Daily LA')
     return daily_la_fig
 
-def get_weekly_la_fig(daily_la):
-    daily_la['Weekly Rolling Mean'] = daily_la['Learners Acquired'].rolling(7).mean()
-    weekly_la_fig = px.line(daily_la,
-        x='LA_date',
-        y='Weekly Rolling Mean',
-        color='campaign',
-        labels={'LA_date': 'Date',
-            'campaign': 'Campaign',
-            'Weekly Rolling Mean': 'LA'},
-        title='Weekly LA')
+def get_weekly_la_fig(daily_la, norm):
+    daily_la['Weekly Rolling Mean'] = daily_la['LA'].rolling(7).mean()
+    if norm == True:
+        weekly_la_fig = px.line(daily_la,
+            x='LA_date',
+            y='Weekly Rolling Mean',
+            color='campaign',
+            labels={'LA_date': 'Day',
+                'campaign': 'Campaign',
+                'Weekly Rolling Mean': 'LA'},
+            title='Weekly LA')
+        weekly_la_fig.update_xaxes(
+            tickmode='array',
+            tickvals = np.arange(0, len(daily_la['LA_date']), 30),
+            ticktext=np.arange(0, 13, 1)
+        )
+        weekly_la_fig.update_layout(
+            xaxis_title='Date (Month)'
+        )
+    else:
+        weekly_la_fig = px.line(daily_la,
+            x='LA_date',
+            y='Weekly Rolling Mean',
+            color='campaign',
+            labels={'LA_date': 'Date',
+                'campaign': 'Campaign',
+                'Weekly Rolling Mean': 'LA'},
+            title='Weekly LA')
     return weekly_la_fig
 
-def get_monthly_la_fig(daily_la):
-    daily_la['Monthly Rolling Mean'] = daily_la['Learners Acquired'].rolling(30).mean()
-    monthly_la_fig = px.line(daily_la,
-        x='LA_date',
-        y='Monthly Rolling Mean',
-        color='campaign',
-        labels={'LA_date': 'Date',
-            'campaign': 'Campaign',
-            'Monthly Rolling Mean': 'LA'},
-        title='Monthly LA')
+def get_monthly_la_fig(daily_la, norm):
+    daily_la['Monthly Rolling Mean'] = daily_la['LA'].rolling(30).mean()
+    if norm == True:
+        monthly_la_fig = px.line(daily_la,
+            x='LA_date',
+            y='Monthly Rolling Mean',
+            color='campaign',
+            labels={'LA_date': 'Day',
+                'campaign': 'Campaign',
+                'Monthly Rolling Mean': 'LA'},
+            title='Monthly LA')
+        monthly_la_fig.update_xaxes(
+            tickmode='array',
+            tickvals = np.arange(0, len(daily_la['LA_date']), 30),
+            ticktext=np.arange(0, 13, 1)
+        )
+        monthly_la_fig.update_layout(
+            xaxis_title='Date (Month)'
+        )
+    else:
+        monthly_la_fig = px.line(daily_la,
+            x='LA_date',
+            y='Monthly Rolling Mean',
+            color='campaign',
+            labels={'LA_date': 'Date',
+                'campaign': 'Campaign',
+                'Monthly Rolling Mean': 'LA'},
+            title='Monthly LA')
     return monthly_la_fig
 
 @st.experimental_memo
@@ -218,7 +307,7 @@ for campaign in st.session_state['campaigns']:
     temp['campaign'] = campaign
     users_df = pd.concat([users_df, temp])
 
-daily_la = users_df.groupby(['campaign', 'LA_date'])['user_pseudo_id'].count().reset_index(name='Learners Acquired')
+daily_la = users_df.groupby(['campaign', 'LA_date'])['user_pseudo_id'].count().reset_index(name='LA')
 
 campaign_data = get_campaign_metrics()
 campaign_data = campaign_data[campaign_data['campaign_name'].isin(st.session_state['campaigns'])]
@@ -230,15 +319,17 @@ st.markdown('***')
 col1, col2 = st.columns(2)
 radio1 = col1.radio('Start Date Toggle', ('Original', 'Normalized Start'))
 radio = col2.radio('Rolling Mean Toggle', ('Daily LA', 'Weekly LA Rolling Mean', 'Monthly LA Rolling Mean'))
+norm = False
 if radio1 == 'Normalized Start':
+    norm = True
     daily_la = get_normalized_start_df(daily_la)
     daily_la = daily_la.rename(columns={'LA_date':'orig_date', 'day': 'LA_date'})
 if radio == 'Daily LA':
-    la_fig = get_daily_la_fig(daily_la)
+    la_fig = get_daily_la_fig(daily_la, norm)
 elif radio == 'Weekly LA Rolling Mean':
-    la_fig = get_weekly_la_fig(daily_la)
+    la_fig = get_weekly_la_fig(daily_la, norm)
 elif radio == 'Monthly LA Rolling Mean':
-    la_fig = get_monthly_la_fig(daily_la)
+    la_fig = get_monthly_la_fig(daily_la, norm)
 st.plotly_chart(la_fig)
 st.markdown('***')
 
@@ -248,6 +339,7 @@ for campaign in st.session_state['campaigns']:
     campaign_cost = ftm_campaigns.loc[ftm_campaigns['Campaign Name'] == campaign, 'Total Cost (USD)'].item()
     temp = get_ra_segments(campaign_cost, ftm_apps, users_df[users_df['campaign'] == campaign])
     temp['campaign'] = campaign
+    temp['campaign_cost'] = round(campaign_cost,2)
     ra_segs = pd.concat([ra_segs, temp])
 ra_segs = ra_segs.sort_values(by=['campaign'])
 
@@ -256,13 +348,14 @@ ra_segs_fig = px.bar(ra_segs,
     y='la_perc',
     color='campaign',
     barmode='group',
-    hover_data=['rac', 'la'],
+    hover_data=['la','campaign_cost','rac'],
     labels={
         'la_perc': '% LA',
         'seg': 'RA Decile',
         'rac': 'RAC (USD)',
         'la': 'LA',
-        'campaign': 'Campaign'
+        'campaign': 'Campaign',
+        'campaign_cost': 'Total Spend (USD)'
     },
     text_auto=True,
     title='LA by RA Decile' 

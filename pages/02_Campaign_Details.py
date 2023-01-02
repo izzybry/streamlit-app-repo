@@ -231,29 +231,33 @@ users_df = get_user_data(start_date, end_date, app, country)
 campaign_data = get_campaign_metrics()
 
 # DAILY READING ACTIVITY
-daily_activity = get_daily_activity(start_date, app, country, bq_id, property_id)
 col1, col2, col3, col4 = st.columns(4)
 col1.metric('Total LA', millify(str(len(users_df))))
 col2.metric('Avg RA', millify(campaign_data.loc[campaign_data['campaign_name'] == campaign, 'ra'].item(),2))
 col3.metric('Avg LAC', millify(campaign_data.loc[campaign_data['campaign_name'] == campaign, 'lac'].item(),2))
 col4.metric('Avg RAC', millify(campaign_data.loc[campaign_data['campaign_name'] == campaign, 'rac'].item(),2))
-col1.metric('Total Levels Played', millify(daily_activity['levels_played'].sum()))
 
+# exp = st.expander('Daily Reading Activity')
 st.markdown('''***
 ##### Daily Reading Activity''')
-tab1, tab2 = st.tabs(['Timeseries', 'Heatmap'])
-daily_activity_fig = px.bar(daily_activity,
-    x='event_date',
-    y='levels_played',
-    labels={
-        'event_date': 'Date',
-        'levels_played': '# Levels Played'
-    })
-tab1.plotly_chart(daily_activity_fig)
+col5, col6 = st.columns(2)
+cb = col5.checkbox('View')
+if cb == True:
+    daily_activity = get_daily_activity(start_date, app, country, bq_id, property_id)
+    col6.metric('Total Levels Played', millify(daily_activity['levels_played'].sum()))
+    tab1, tab2 = st.tabs(['Timeseries', 'Heatmap'])
+    daily_activity_fig = px.bar(daily_activity,
+        x='event_date',
+        y='levels_played',
+        labels={
+            'event_date': 'Date',
+            'levels_played': '# Levels Played'
+        })
+    tab1.plotly_chart(daily_activity_fig)
 
-da_fig = calplot(daily_activity, x='event_date', y='levels_played', dark_theme=True, gap=.5,
-    years_title=True, name='Levels Played', colorscale='blues', space_between_plots=0.2)
-tab2.plotly_chart(da_fig)
+    da_fig = calplot(daily_activity, x='event_date', y='levels_played', dark_theme=False, gap=.5,
+        years_title=True, name='Levels Played', colorscale=['ghostwhite','royalblue'], space_between_plots=0.2)
+    tab2.plotly_chart(da_fig)
 st.markdown('***')
 
 # DAILY LEARNERS ACQUIRED
@@ -277,26 +281,28 @@ daily_la_fig.add_trace(rm_fig.data[0])
 daily_la_fig.add_trace(rm_fig.data[1])
 st.plotly_chart(daily_la_fig)
 
-country_la = users_df.groupby(['country'])['user_pseudo_id'].count().reset_index(name='LA')
-country_fig = px.choropleth(country_la,
-    locations='country',
-    color='LA',
-    color_continuous_scale='bluered',
-    locationmode='country names',
-    title='LA by Country')
-country_fig.update_layout(geo=dict(bgcolor= 'rgba(0,0,0,0)'))
-st.plotly_chart(country_fig)
+if country == 'All':
+    country_la = users_df.groupby(['country'])['user_pseudo_id'].count().reset_index(name='LA')
+    country_fig = px.choropleth(country_la,
+        locations='country',
+        color='LA',
+        color_continuous_scale=['blue', 'red', 'yellow'],
+        locationmode='country names',
+        title='LA by Country')
+    country_fig.update_layout(geo=dict(bgcolor= 'rgba(0,0,0,0)'))
+    st.plotly_chart(country_fig)
 
 # READING ACQUISITION DECILES
 ra_segs = get_ra_segments(ftm_campaigns, ftm_apps, users_df)
+ra_segs['la_perc'] = round(ra_segs['la_perc'],2)
 ra_segs_fig = px.bar(ra_segs,
     x='seg',
-    y='la',
+    y='la_perc',
     hover_data=['rac'],
     labels={
         'seg': 'RA Decile',
         'rac': 'RAC (USD)',
-        'la': 'LA'
+        'la_perc': '% LA'
     },
     text_auto=True,
     title='LA by RA Decile' 

@@ -82,6 +82,16 @@ def get_campaign_metrics():
     })
     return camp_metrics_data
 
+def get_color_map(camps):
+    res = {}
+    for i in range(len(camps)):
+        res.update({camps[i]: px.colors.qualitative.Plotly[i]})
+    return res
+
+def color_camps(val):
+    color = cmap[val]
+    return f'background-color: {color}'
+
 
 # --- UI ---
 st.title('Campaign Comparison Summary')
@@ -134,22 +144,23 @@ col1, col2 = st.columns(2)
 ftm_campaign_metrics = get_campaign_metrics()
 ftm_campaign_metrics = ftm_campaign_metrics[ftm_campaign_metrics['campaign_name'].isin(st.session_state['campaigns'])]
 top_df = ftm_campaign_metrics.rename(columns={'campaign_name': 'Campaign', 'la': 'LA', 'ra': 'RA', 'rac': 'RAC', 'lac': 'LAC'})
+cmap = get_color_map(st.session_state['campaigns'])
 top_la = top_df.sort_values(by=['LA'], ascending=False).reset_index()
 top_la.index = top_la.index + 1
 col1.write('Highest LA')
-col1.table(top_la[['Campaign', 'LA']].head(10))
+col1.table(top_la[['Campaign', 'LA']].head(10).style.applymap(color_camps, subset=['Campaign']))
 top_ra = top_df.sort_values(by=['RA'], ascending=False).reset_index()
 top_ra.index = top_ra.index + 1
 col2.write('Highest RA')
-col2.table(top_ra[['Campaign', 'RA']].head(10))
+col2.table(top_ra[['Campaign', 'RA']].head(10).style.applymap(color_camps, subset=['Campaign']))
 top_lac = top_df.sort_values(by=['LAC'], ascending=True).reset_index()
 top_lac.index = top_lac.index + 1
 col1.write('Lowest LAC')
-col1.table(top_lac[['Campaign', 'LAC']].head(10))
+col1.table(top_lac[['Campaign', 'LAC']].head(10).style.applymap(color_camps, subset=['Campaign']))
 top_rac = top_df.sort_values(by=['RAC'], ascending=True).reset_index()
 top_rac.index = top_rac.index + 1
 col2.write('Lowest RAC')
-col2.table(top_rac[['Campaign', 'RAC']].head(10))
+col2.table(top_rac[['Campaign', 'RAC']].head(10).style.applymap(color_camps, subset=['Campaign']))
 st.markdown('***')
 
 # LEARNER & READING ACQUISITION COST
