@@ -127,11 +127,13 @@ select_campaigns = st.sidebar.multiselect(
 # GANTT CHART
 ftm_campaigns = get_campaign_data()
 ftm_campaigns = ftm_campaigns[ftm_campaigns['Campaign Name'].isin(st.session_state['campaigns'])]
+ftm_campaigns['Total Cost (USD)'] = round(ftm_campaigns['Total Cost (USD)'],2)
 gantt = px.timeline(ftm_campaigns,
     x_start='Start Date',
     x_end='End Date',
     y='Campaign Name',
     color='Campaign Name',
+    hover_data=['Total Cost (USD)'],
     labels={'Campaign Name': 'Campaign'},
     title='Gantt Chart')
 gantt.update_layout(showlegend=False)

@@ -286,7 +286,7 @@ if country == 'All':
     country_fig = px.choropleth(country_la,
         locations='country',
         color='LA',
-        color_continuous_scale=['blue', 'red', 'yellow'],
+        color_continuous_scale=['#E6DF15', '#DB830F', '#1584A3'],#['blue', 'red', 'yellow'],
         locationmode='country names',
         title='LA by Country')
     country_fig.update_layout(geo=dict(bgcolor= 'rgba(0,0,0,0)'))

@@ -50,7 +50,7 @@ def get_campaign_data():
     })
     return campaign_data
 
-@st.experimental_memo
+# @st.experimental_memo
 def get_annual_campaign_data():
     ann_campaign_sheet_url = st.secrets["ann_camp_metrics_gsheets_url"]
     year = pd.to_datetime("today").date().year
@@ -302,7 +302,7 @@ country_la = users_df.groupby(['country'])['user_pseudo_id'].count().reset_index
 country_fig = px.choropleth(country_la,
     locations='country',
     color='LA',
-    color_continuous_scale=['blue', 'red', 'yellow'],
+    color_continuous_scale=['#E6DF15', '#DB830F', '#1584A3'],#['blue', 'red', 'yellow'],
     locationmode='country names',
     title='LA by Country')
 country_fig.update_layout(geo=dict(bgcolor= 'rgba(0,0,0,0)'))
