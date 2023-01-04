@@ -302,11 +302,11 @@ country_la = users_df.groupby(['country'])['user_pseudo_id'].count().reset_index
 country_fig = px.choropleth(country_la,
     locations='country',
     color='LA',
-    color_continuous_scale=['#E6DF15', '#DB830F', '#1584A3'],#['blue', 'red', 'yellow'],
+    color_continuous_scale=['#1584A3', '#DB830F', '#E6DF15'],#['blue', 'orange', 'yellow'],
     locationmode='country names',
     title='LA by Country')
 country_fig.update_layout(geo=dict(bgcolor= 'rgba(0,0,0,0)'))
-country_fig.update_geos(fitbounds='locations', visible=False)
+country_fig.update_geos(fitbounds='locations')
 st.plotly_chart(country_fig)
 
 # LA BY RA DECILE
