@@ -216,14 +216,7 @@ users_df = get_user_data(start_date, end_date, apps_list, countries)
 # DAILY READING ACTIVITY
 col1, col2, col3, col4 = st.columns(4)
 col1.metric('Total LA', millify(str(len(users_df))))
-# col2.metric('Avg RA', millify(campaign_data.loc[campaign_data['campaign_name'] == campaign, 'ra'].item(),2))
-# col3.metric('Avg LAC', millify(campaign_data.loc[campaign_data['campaign_name'] == campaign, 'lac'].item(),2))
-# col4.metric('Avg RAC', millify(campaign_data.loc[campaign_data['campaign_name'] == campaign, 'rac'].item(),2))
 
-# daily_activity = get_daily_activity(start_date, languages, apps_list, countries, bq_ids, property_ids)
-# col1, col2 = st.columns(2)
-# col1.metric('Total LA', millify(str(len(users_df))))
-# col2.metric('Total Levels Played', millify(daily_activity['levels_played'].sum()))
 st.markdown('''***
 ##### Daily Reading Activity''')
 col5, col6 = st.columns(2)
@@ -245,16 +238,6 @@ if cb == True:
         years_title=True, name='Levels Played', colorscale=['ghostwhite','royalblue'], space_between_plots=0.2)
     tab2.plotly_chart(da_fig)
 st.markdown('***')
-# daily_activity_fig = px.bar(daily_activity,
-#     x='event_date',
-#     y='levels_played',
-#     labels={
-#         'event_date': 'Date',
-#         'levels_played': '# Levels Played'
-#     },
-#     title='Daily Reading Activity'
-# )
-# st.plotly_chart(daily_activity_fig)
 
 # DAILY LEARNERS ACQUIRED
 daily_la = users_df.groupby(['LA_date'])['user_pseudo_id'].count().reset_index(name='Learners Acquired')
@@ -280,7 +263,7 @@ country_la = users_df.groupby(['country'])['user_pseudo_id'].count().reset_index
 country_fig = px.choropleth(country_la,
     locations='country',
     color='Learners Acquired',
-    color_continuous_scale='Emrld',
+    color_continuous_scale=['#1584A3', '#DB830F', '#E6DF15'],
     locationmode='country names',
     title='Learners Acquired by Country')
 country_fig.update_layout(geo=dict(bgcolor= 'rgba(0,0,0,0)'))
