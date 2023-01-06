@@ -85,12 +85,17 @@ def get_campaign_metrics():
 def get_color_map(camps):
     res = {}
     for i in range(len(camps)):
-        res.update({camps[i]: px.colors.qualitative.Plotly[i]})
+        res.update({camps[i]: plotly.colors.DEFAULT_PLOTLY_COLORS[i]})
     return res
 
 def color_camps(val):
     color = cmap[val]
     return f'background-color: {color}'
+
+# cmap = get_color_map(st.session_state['campaigns'])
+# top_la = top_df.sort_values(by=['LA'], ascending=False).reset_index()
+# st.table(top_la[['Campaign', 'LA']].head(10).style.applymap(color_camps, subset=['Campaign']))
+
 
 
 # --- UI ---
@@ -107,12 +112,12 @@ hide_table_row_index = """
 st.markdown(hide_table_row_index, unsafe_allow_html=True)
 def_df = pd.DataFrame(
     [
-        ['LA', 'Learner Acquisition', 'The number of users that have completed at least one FTM level'],
-        ['LAC', 'Learner Acquisition Cost', 'The cost (USD) of acquiring one learner'],
-        ['RA', 'Reading Acquisition', 'The average percentage of FTM levels completed per learner'],
-        ['RAC', 'Reading Acquisition Cost', 'The cost (USD) of acquiring the average amount of reading per learner']
+        ['LA', 'Learner Acquisition', 'The number of users that have completed at least one FTM level.', 'COUNT(Learners)'],
+        ['LAC', 'Learner Acquisition Cost', 'The cost (USD) of acquiring one learner.', 'Total Spend / LA'],
+        ['RA', ' Reading Acquisition', 'The  average percentage of FTM levels completed per learner from start date to today.', 'AVG Max Level Reached / Total Levels'],
+        ['RAC', 'Reading Acquisition Cost', 'The cost (USD) associated with one learner reaching the average percentage of FTM levels (RA).', 'Total Spend / RA * LA']
     ],
-    columns=['Acronym', 'Name', 'Definition']
+    columns=['Acronym', 'Name', 'Definition', 'Formula']
 )
 expander.table(def_df)
 
@@ -125,16 +130,18 @@ select_campaigns = st.sidebar.multiselect(
 )
 
 # GANTT CHART
-ftm_campaigns = get_campaign_data()
 ftm_campaigns = ftm_campaigns[ftm_campaigns['Campaign Name'].isin(st.session_state['campaigns'])]
 ftm_campaigns['Total Cost (USD)'] = round(ftm_campaigns['Total Cost (USD)'],2)
-gantt = px.timeline(ftm_campaigns,
+ftm_campaign_metrics = get_campaign_metrics()
+ftm_campaign_metrics = ftm_campaign_metrics[ftm_campaign_metrics['campaign_name'].isin(st.session_state['campaigns'])]
+gantt_df = pd.merge(ftm_campaigns, ftm_campaign_metrics, how='left', left_on='Campaign Name', right_on='campaign_name')
+gantt = px.timeline(gantt_df,
     x_start='Start Date',
     x_end='End Date',
     y='Campaign Name',
     color='Campaign Name',
-    hover_data=['Total Cost (USD)'],
-    labels={'Campaign Name': 'Campaign'},
+    hover_data=['Total Cost (USD)', 'la'],
+    labels={'Campaign Name': 'Campaign', 'la': 'LA'},
     title='Gantt Chart')
 gantt.update_layout(showlegend=False)
 st.plotly_chart(gantt)
@@ -143,26 +150,24 @@ st.plotly_chart(gantt)
 st.markdown('***')
 st.subheader('Top 10 Leaderboard')
 col1, col2 = st.columns(2)
-ftm_campaign_metrics = get_campaign_metrics()
-ftm_campaign_metrics = ftm_campaign_metrics[ftm_campaign_metrics['campaign_name'].isin(st.session_state['campaigns'])]
 top_df = ftm_campaign_metrics.rename(columns={'campaign_name': 'Campaign', 'la': 'LA', 'ra': 'RA', 'rac': 'RAC', 'lac': 'LAC'})
 cmap = get_color_map(st.session_state['campaigns'])
 top_la = top_df.sort_values(by=['LA'], ascending=False).reset_index()
 top_la.index = top_la.index + 1
 col1.write('Highest LA')
-col1.table(top_la[['Campaign', 'LA']].head(10).style.applymap(color_camps, subset=['Campaign']))
+col1.table(top_la[['Campaign', 'LA']].head(10))#.style.applymap(color_camps, subset=['Campaign']))
 top_ra = top_df.sort_values(by=['RA'], ascending=False).reset_index()
 top_ra.index = top_ra.index + 1
 col2.write('Highest RA')
-col2.table(top_ra[['Campaign', 'RA']].head(10).style.applymap(color_camps, subset=['Campaign']))
+col2.table(top_ra[['Campaign', 'RA']].head(10))#.style.applymap(color_camps, subset=['Campaign']))
 top_lac = top_df.sort_values(by=['LAC'], ascending=True).reset_index()
 top_lac.index = top_lac.index + 1
 col1.write('Lowest LAC')
-col1.table(top_lac[['Campaign', 'LAC']].head(10).style.applymap(color_camps, subset=['Campaign']))
+col1.table(top_lac[['Campaign', 'LAC']].head(10))#.style.applymap(color_camps, subset=['Campaign']))
 top_rac = top_df.sort_values(by=['RAC'], ascending=True).reset_index()
 top_rac.index = top_rac.index + 1
 col2.write('Lowest RAC')
-col2.table(top_rac[['Campaign', 'RAC']].head(10).style.applymap(color_camps, subset=['Campaign']))
+col2.table(top_rac[['Campaign', 'RAC']].head(10))#.style.applymap(color_camps, subset=['Campaign']))
 st.markdown('***')
 
 # LEARNER & READING ACQUISITION COST

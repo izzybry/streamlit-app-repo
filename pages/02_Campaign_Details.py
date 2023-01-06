@@ -90,10 +90,9 @@ def get_apps_data():
         data = apps_rows)
     return apps_data
 
-@st.experimental_memo
-def get_ra_segments(campaign_data, app_data, user_data):
+# @st.experimental_memo
+def get_ra_segments(campaign_data, total_lvls, user_data):
     df = pd.DataFrame(columns = ['segment', 'la', 'perc_la', 'ra', 'rac'])
-    total_lvls = app_data['total_lvls'][0]
     seg = []
     ra = []
     for lvl in user_data['max_lvl']:
@@ -141,13 +140,15 @@ def get_campaign_metrics():
     return camp_metrics_data
 
 @st.experimental_memo
-def get_daily_activity(start_date, app, country, bq_id, property_id):
+def get_daily_activity(user_data, start_date, app, country, bq_id, property_id):
+    user_ids = user_data['user_pseudo_id'].tolist()
     if country == 'All':
         sql_query = f"""
             SELECT event_date, COUNT(event_name) AS levels_played FROM `{bq_id}.analytics_{property_id}.events_20*`,
             UNNEST(event_params) AS params
             WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN @start AND @end
             AND app_info.id = @app
+            AND user_pseudo_id IN UNNEST(@user_ids)
             AND event_name LIKE 'GamePlay'
             AND params.key = 'action'
             AND (params.value.string_value LIKE '%LevelSuccess%'
@@ -162,6 +163,7 @@ def get_daily_activity(start_date, app, country, bq_id, property_id):
             WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN @start AND @end
             AND app_info.id = @app
             AND geo.country = @country
+            AND user_pseudo_id IN UNNEST(@user_ids)
             AND event_name LIKE 'GamePlay'
             AND params.key = 'action'
             AND (params.value.string_value LIKE '%LevelSuccess%'
@@ -175,7 +177,8 @@ def get_daily_activity(start_date, app, country, bq_id, property_id):
         bigquery.ScalarQueryParameter("app", "STRING", app),
         bigquery.ScalarQueryParameter("country", "STRING", country),
         bigquery.ScalarQueryParameter("bq_id", "STRING", bq_id),
-        bigquery.ScalarQueryParameter("property_id", "STRING", property_id)
+        bigquery.ScalarQueryParameter("property_id", "STRING", property_id),
+        bigquery.ArrayQueryParameter("user_ids", "STRING", user_ids)
     ]
     job_config = bigquery.QueryJobConfig(
         query_parameters = query_parameters
@@ -200,12 +203,12 @@ hide_table_row_index = """
 st.markdown(hide_table_row_index, unsafe_allow_html=True)
 def_df = pd.DataFrame(
     [
-        ['LA', 'Learner Acquisition', 'The number of users that have completed at least one FTM level'],
-        ['LAC', 'Learner Acquisition Cost', 'The cost (USD) of acquiring one learner'],
-        ['RA', 'Reading Acquisition', 'The average percentage of FTM levels completed per learner'],
-        ['RAC', 'Reading Acquisition Cost', 'The cost (USD) of acquiring the average amount of reading per learner']
+        ['LA', 'Learner Acquisition', 'The number of users that have completed at least one FTM level.', 'COUNT(Learners)'],
+        ['LAC', 'Learner Acquisition Cost', 'The cost (USD) of acquiring one learner.', 'Total Spend / LA'],
+        ['RA', ' Reading Acquisition', 'The  average percentage of FTM levels completed per learner from start date to today.', 'AVG Max Level Reached / Total Levels'],
+        ['RAC', 'Reading Acquisition Cost', 'The cost (USD) associated with one learner reaching the average percentage of FTM levels (RA).', 'Total Spend / RA * LA']
     ],
-    columns=['Acronym', 'Name', 'Definition']
+    columns=['Acronym', 'Name', 'Definition', 'Formula']
 )
 expander.table(def_df)
 ftm_campaigns = get_campaign_data()
@@ -226,39 +229,15 @@ app = ftm_apps.loc[ftm_apps['language'] == language, 'app_id'].item()
 country = ftm_campaigns.loc[ftm_campaigns['Campaign Name'] == campaign, 'Country'].item()
 bq_id = ftm_apps.loc[ftm_apps['language'] == language, 'bq_project_id'].item()
 property_id = ftm_apps.loc[ftm_apps['language'] == language, 'bq_property_id'].item() 
-users_df = pd.DataFrame()
 users_df = get_user_data(start_date, end_date, app, country)
 campaign_data = get_campaign_metrics()
 
-# DAILY READING ACTIVITY
+# METRICS 
 col1, col2, col3, col4 = st.columns(4)
 col1.metric('Total LA', millify(str(len(users_df))))
 col2.metric('Avg RA', millify(campaign_data.loc[campaign_data['campaign_name'] == campaign, 'ra'].item(),2))
 col3.metric('Avg LAC', millify(campaign_data.loc[campaign_data['campaign_name'] == campaign, 'lac'].item(),2))
 col4.metric('Avg RAC', millify(campaign_data.loc[campaign_data['campaign_name'] == campaign, 'rac'].item(),2))
-
-# exp = st.expander('Daily Reading Activity')
-st.markdown('''***
-##### Daily Reading Activity''')
-col5, col6 = st.columns(2)
-cb = col5.checkbox('View')
-if cb == True:
-    daily_activity = get_daily_activity(start_date, app, country, bq_id, property_id)
-    col6.metric('Total Levels Played', millify(daily_activity['levels_played'].sum()))
-    tab1, tab2 = st.tabs(['Timeseries', 'Heatmap'])
-    daily_activity_fig = px.bar(daily_activity,
-        x='event_date',
-        y='levels_played',
-        labels={
-            'event_date': 'Date',
-            'levels_played': '# Levels Played'
-        })
-    tab1.plotly_chart(daily_activity_fig)
-
-    da_fig = calplot(daily_activity, x='event_date', y='levels_played', dark_theme=False, gap=.5,
-        years_title=True, name='Levels Played', colorscale=['ghostwhite','royalblue'], space_between_plots=0.2)
-    tab2.plotly_chart(da_fig)
-st.markdown('***')
 
 # DAILY LEARNERS ACQUIRED
 daily_la = users_df.groupby(['LA_date'])['user_pseudo_id'].count().reset_index(name='Learners Acquired')
@@ -293,7 +272,8 @@ if country == 'All':
     st.plotly_chart(country_fig)
 
 # READING ACQUISITION DECILES
-ra_segs = get_ra_segments(ftm_campaigns, ftm_apps, users_df)
+total_lvls = ftm_apps.loc[ftm_apps['language'] == language, 'total_lvls'].item()
+ra_segs = get_ra_segments(ftm_campaigns, total_lvls, users_df)
 ra_segs['la_perc'] = round(ra_segs['la_perc'],2)
 ra_segs_fig = px.bar(ra_segs,
     x='seg',
@@ -311,3 +291,26 @@ st.plotly_chart(ra_segs_fig)
 st.caption('''The chart above displays LA by *RA Decile*.
     RA Deciles represent the progression of reading acquisition split into ten percentage groups.
     E.g. A learner that has completed 55% of the total FTM levels is included in the 0.5 RA Decile above.''')
+
+# DAILY READING ACTIVITY
+st.markdown('''***
+##### Daily Reading Activity''')
+col5, col6 = st.columns(2)
+cb = col5.checkbox('View')
+if cb == True:
+    daily_activity = get_daily_activity(users_df, start_date, app, country, bq_id, property_id)
+    col6.metric('Total Levels Played', millify(daily_activity['levels_played'].sum()))
+    tab1, tab2 = st.tabs(['Timeseries', 'Heatmap'])
+    daily_activity_fig = px.bar(daily_activity,
+        x='event_date',
+        y='levels_played',
+        labels={
+            'event_date': 'Date',
+            'levels_played': '# Levels Played'
+        })
+    tab1.plotly_chart(daily_activity_fig)
+
+    da_fig = calplot(daily_activity, x='event_date', y='levels_played', dark_theme=False, gap=.5,
+        years_title=True, name='Levels Played', colorscale=['ghostwhite','royalblue'], space_between_plots=0.2)
+    tab2.plotly_chart(da_fig)
+st.markdown('***')

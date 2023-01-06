@@ -246,12 +246,12 @@ hide_table_row_index = """
 st.markdown(hide_table_row_index, unsafe_allow_html=True)
 def_df = pd.DataFrame(
     [
-        ['LA', 'Learner Acquisition', 'The number of users that have completed at least one FTM level'],
-        ['LAC', 'Learner Acquisition Cost', 'The cost (USD) of acquiring one learner'],
-        ['RA', 'Reading Acquisition', 'The average percentage of FTM levels completed per learner'],
-        ['RAC', 'Reading Acquisition Cost', 'The cost (USD) of acquiring the average amount of reading per learner']
+        ['LA', 'Learner Acquisition', 'The number of users that have completed at least one FTM level.', 'COUNT(Learners)'],
+        ['LAC', 'Learner Acquisition Cost', 'The cost (USD) of acquiring one learner.', 'Total Spend / LA'],
+        ['EstRA', 'Estimated Reading Acquisition', 'The estimated average percentage of FTM levels completed per learner from start date to today.', 'AVG Max Level Reached / AVG Total Levels'],
+        ['RAC', 'Reading Acquisition Cost', 'The cost (USD) associated with one learner reaching the average percentage of FTM levels (EstRA).', 'Total Spend / EstRA * LA']
     ],
-    columns=['Acronym', 'Name', 'Definition']
+    columns=['Acronym', 'Name', 'Definition', 'Formula']
 )
 expander.table(def_df)
 
@@ -267,11 +267,11 @@ ann_camp_data = ann_camp_data[ann_camp_data['year'].isin(st.session_state['campa
 col1, col2 = st.columns(2)
 col1.metric('Total LA', millify(ann_camp_data['la'].sum()))
 avg_ra = np.average(ann_camp_data['ra'], weights=ann_camp_data['la'])
-col2.metric('Avg RA (Weighted)', millify(avg_ra,precision=2))
+col2.metric('Avg EstRA (Weighted)', millify(avg_ra,precision=2))
 
 # SUMMARY TABLE
-sum_table = ann_camp_data.rename(columns={'year': 'Year', 'la': 'LA', 'ra': 'RA'})
-sum_table = sum_table.style.format({'LA':'{:n}', 'RA': '{:.3f}'})
+sum_table = ann_camp_data.rename(columns={'year': 'Year', 'la': 'LA', 'ra': 'EstRA'})
+sum_table = sum_table.style.format({'LA':'{:n}', 'EstRA': '{:.3f}'})
 st.table(sum_table)
 
 # DAILY LEARNERS ACQUIRED
@@ -323,32 +323,20 @@ ra_segs = ra_segs.astype({
     })
 ra_segs = ra_segs.sort_values(by=['campaign'])
 ra_segs['la_perc'] = round(ra_segs['la_perc'], 2)
-if len(st.session_state['campaigns']) == 0:
-    ra_segs_fig = px.bar(ra_segs,
-        x='seg',
-        y='la',
-        labels={
-            'seg': 'RA Decile',
-            'la': 'LA',
-            'campaign': 'Campaign'
-        },
-        text_auto=True,
-        title='LA by RA Decile' 
-    )
-else:
-    ra_segs_fig = px.bar(ra_segs,
-        x='seg',
-        y='la_perc',
-        color='campaign',
-        barmode='group',
-        labels={
-            'seg': 'RA Decile',
-            'la': 'LA',
-            'la_perc': '% LA',
-            'campaign': 'Campaign'
-        },
-        text_auto=True,
-        title='LA by RA Decile' )
+ra_segs_fig = px.bar(ra_segs,
+    x='seg',
+    y='la_perc',
+    color='campaign',
+    barmode='group',
+    hover_data=['la'],
+    labels={
+        'seg': 'EstRA Decile',
+        'la': 'LA',
+        'la_perc': '% LA',
+        'campaign': 'Campaign'
+    },
+    text_auto=True,
+    title='LA by EstRA Decile' )
 st.plotly_chart(ra_segs_fig)
 st.caption('''The chart above displays LA by *RA Decile*.
     RA Deciles represent the progression of reading acquisition split into ten percentage groups.

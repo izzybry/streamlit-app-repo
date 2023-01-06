@@ -273,12 +273,12 @@ hide_table_row_index = """
 st.markdown(hide_table_row_index, unsafe_allow_html=True)
 def_df = pd.DataFrame(
     [
-        ['LA', 'Learner Acquisition', 'The number of users that have completed at least one FTM level'],
-        ['LAC', 'Learner Acquisition Cost', 'The cost (USD) of acquiring one learner'],
-        ['RA', 'Reading Acquisition', 'The average percentage of FTM levels completed per learner'],
-        ['RAC', 'Reading Acquisition Cost', 'The cost (USD) of acquiring the average amount of reading per learner']
+        ['LA', 'Learner Acquisition', 'The number of users that have completed at least one FTM level.', 'COUNT(Learners)'],
+        ['LAC', 'Learner Acquisition Cost', 'The cost (USD) of acquiring one learner.', 'Total Spend / LA'],
+        ['RA', ' Reading Acquisition', 'The  average percentage of FTM levels completed per learner from start date to today.', 'AVG Max Level Reached / Total Levels'],
+        ['RAC', 'Reading Acquisition Cost', 'The cost (USD) associated with one learner reaching the average percentage of FTM levels (RA).', 'Total Spend / RA * LA']
     ],
-    columns=['Acronym', 'Name', 'Definition']
+    columns=['Acronym', 'Name', 'Definition', 'Formula']
 )
 expander.table(def_df)
 

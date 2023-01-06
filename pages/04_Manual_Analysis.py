@@ -14,6 +14,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from millify import millify
 from plotly_calplot import calplot
+import numpy as np
 
 # --- DATA ---
 # Create a Google Sheets connection object.
@@ -84,9 +85,8 @@ def get_apps_data():
     return apps_data
 
 @st.experimental_memo
-def get_ra_segments(campaign_data, app_data, user_data):
-    df = pd.DataFrame(columns = ['segment', 'la', 'perc_la', 'ra', 'rac'])
-    total_lvls = app_data['total_lvls'][0]
+def get_ra_segments(total_lvls, user_data):
+    df = pd.DataFrame(columns = ['segment', 'la', 'perc_la', 'ra'])
     seg = []
     ra = []
     for lvl in user_data['max_lvl']:
@@ -116,11 +116,11 @@ def get_ra_segments(campaign_data, app_data, user_data):
     user_data['ra'] = ra
     res = user_data.groupby('seg').agg(la=('user_pseudo_id','count'), ra=('ra','mean')).reset_index()
     res['la_perc'] = res['la'] / res['la'].sum()
-    res['rac'] = campaign_data['Total Cost (USD)'][0] * res['la_perc'] / (res['ra'] * res['la'].sum())
     return res
 
 @st.experimental_memo
-def get_daily_activity(start_date, langs, apps, countries, bq_ids, property_ids):
+def get_daily_activity(user_data, start_date, langs, apps, countries, bq_ids, property_ids):
+    user_ids = user_data['user_pseudo_id'].tolist()
     res = pd.DataFrame()
     for l in langs:
         sql_query = f"""
@@ -129,6 +129,7 @@ def get_daily_activity(start_date, langs, apps, countries, bq_ids, property_ids)
             WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN @start AND @end
             AND app_info.id IN UNNEST(@apps)
             AND geo.country IN UNNEST(@countries)
+            AND user_pseudo_id IN UNNEST(@user_ids)
             AND event_name LIKE 'GamePlay'
             AND params.key = 'action'
             AND (params.value.string_value LIKE '%LevelSuccess%'
@@ -140,7 +141,8 @@ def get_daily_activity(start_date, langs, apps, countries, bq_ids, property_ids)
             bigquery.ScalarQueryParameter("start", "DATE", start_date),
             bigquery.ScalarQueryParameter("end", "DATE", pd.to_datetime("today").date()-pd.Timedelta(1, unit='D')),
             bigquery.ArrayQueryParameter("apps", "STRING", apps),
-            bigquery.ArrayQueryParameter("countries", "STRING", countries)
+            bigquery.ArrayQueryParameter("countries", "STRING", countries),
+            bigquery.ArrayQueryParameter("user_ids", "STRING", user_ids)
         ]
         job_config = bigquery.QueryJobConfig(
             query_parameters = query_parameters
@@ -167,36 +169,56 @@ hide_table_row_index = """
 st.markdown(hide_table_row_index, unsafe_allow_html=True)
 def_df = pd.DataFrame(
     [
-        ['LA', 'Learner Acquisition', 'The number of users that have completed at least one FTM level'],
-        ['LAC', 'Learner Acquisition Cost', 'The cost (USD) of acquiring one learner'],
-        ['RA', 'Reading Acquisition', 'The average percentage of FTM levels completed per learner'],
-        ['RAC', 'Reading Acquisition Cost', 'The cost (USD) of acquiring the average amount of reading per learner']
+        ['LA', 'Learner Acquisition', 'The number of users that have completed at least one FTM level.', 'COUNT(Learners)'],
+        ['LAC', 'Learner Acquisition Cost', 'The cost (USD) of acquiring one learner.', 'Total Spend / LA'],
+        ['EstRA', 'Estimated Reading Acquisition', 'The estimated average percentage of FTM levels completed per learner from start date to today.', 'AVG Max Level Reached / AVG Total Levels'],
+        ['RAC', 'Reading Acquisition Cost', 'The cost (USD) associated with one learner reaching the average percentage of FTM levels (RA).', 'Total Spend / RA * LA']
     ],
-    columns=['Acronym', 'Name', 'Definition']
+    columns=['Acronym', 'Name', 'Definition', 'Formula']
 )
 expander.table(def_df)
 
 select_date_range = st.sidebar.date_input(
-    'Select date range',
+    'Select Date Range',
     (pd.to_datetime("today").date() - pd.Timedelta(30, unit='d'),
         pd.to_datetime("today").date() - pd.Timedelta(1, unit='d')),
     key='date_range'
 )
+st.sidebar.markdown('***')
 ftm_apps = get_apps_data()
 langs = ftm_apps['language']
-select_languages = st.sidebar.multiselect(
-    'Select languages',
-    langs,
-    default=langs,
-    key='languages'
-)
+container_lang = st.sidebar.container()
+all_langs = container_lang.checkbox('Select All Languages', value=True)
+if all_langs:
+    select_languages = container_lang.multiselect(
+        'Select Languages',
+        langs,
+        default=langs,
+        key='languages'
+    )
+else:
+    select_languages = container_lang.multiselect(
+        'Select Languages',
+        langs,
+        key='languages'
+    )
+st.sidebar.markdown('***')
 countries_df = pd.read_csv('countries.csv')
-select_countries = st.sidebar.multiselect(
-    'Select countries',
-    countries_df['name'],
-    default=countries_df['name'],
-    key='countries'
-)
+container_country = st.sidebar.container()
+all_countries = container_country.checkbox('Select All Countries', value=True)
+if all_countries:
+    select_countries = container_country.multiselect(
+        'Select Countries',
+        countries_df['name'],
+        default=countries_df['name'],
+        key='countries'
+    )
+else:
+    select_countries = container_country.multiselect(
+        'Select Countries',
+        countries_df['name'],
+        key='countries'
+    )
 
 # SET VARIABLES
 start_date = st.session_state['date_range'][0]
@@ -213,31 +235,10 @@ apps_list = list(apps.values())
 countries = st.session_state['countries']
 users_df = get_user_data(start_date, end_date, apps_list, countries)
 
-# DAILY READING ACTIVITY
-col1, col2, col3, col4 = st.columns(4)
+# METRICS
+container_metrics = st.container()
+col1, col2 = container_metrics.columns(2)
 col1.metric('Total LA', millify(str(len(users_df))))
-
-st.markdown('''***
-##### Daily Reading Activity''')
-col5, col6 = st.columns(2)
-cb = col5.checkbox('View')
-if cb == True:
-    daily_activity = get_daily_activity(start_date, languages, apps_list, countries, bq_ids, property_ids)
-    col6.metric('Total Levels Played', millify(daily_activity['levels_played'].sum()))
-    tab1, tab2 = st.tabs(['Timeseries', 'Heatmap'])
-    daily_activity_fig = px.bar(daily_activity,
-        x='event_date',
-        y='levels_played',
-        labels={
-            'event_date': 'Date',
-            'levels_played': '# Levels Played'
-        })
-    tab1.plotly_chart(daily_activity_fig)
-
-    da_fig = calplot(daily_activity, x='event_date', y='levels_played', dark_theme=False, gap=.5,
-        years_title=True, name='Levels Played', colorscale=['ghostwhite','royalblue'], space_between_plots=0.2)
-    tab2.plotly_chart(da_fig)
-st.markdown('***')
 
 # DAILY LEARNERS ACQUIRED
 daily_la = users_df.groupby(['LA_date'])['user_pseudo_id'].count().reset_index(name='Learners Acquired')
@@ -259,30 +260,59 @@ daily_la_fig.add_trace(rm_fig.data[0])
 daily_la_fig.add_trace(rm_fig.data[1])
 st.plotly_chart(daily_la_fig)
 
-country_la = users_df.groupby(['country'])['user_pseudo_id'].count().reset_index(name='Learners Acquired')
-country_fig = px.choropleth(country_la,
-    locations='country',
-    color='Learners Acquired',
-    color_continuous_scale=['#1584A3', '#DB830F', '#E6DF15'],
-    locationmode='country names',
-    title='Learners Acquired by Country')
-country_fig.update_layout(geo=dict(bgcolor= 'rgba(0,0,0,0)'))
-st.plotly_chart(country_fig)
-
-# DAILY READING ACQUIRED
+if len(st.session_state['countries']) > 1:
+    country_la = users_df.groupby(['country'])['user_pseudo_id'].count().reset_index(name='Learners Acquired')
+    country_fig = px.choropleth(country_la,
+        locations='country',
+        color='Learners Acquired',
+        color_continuous_scale=['#1584A3', '#DB830F', '#E6DF15'],
+        locationmode='country names',
+        title='Learners Acquired by Country')
+    country_fig.update_layout(geo=dict(bgcolor= 'rgba(0,0,0,0)'))
+    st.plotly_chart(country_fig)
 
 # READING ACQUISITION DECILES
-# ra_segs = get_ra_segments(ftm_campaigns, ftm_apps, users_df)
-# ra_segs_fig = px.bar(ra_segs,
-#     x='seg',
-#     y='la_perc',
-#     hover_data=['rac', 'la'],
-#     labels={
-#         'la_perc': '% LA',
-#         'seg': 'RA Decile',
-#         'rac': 'RAC (USD)',
-#         'la': 'LA'
-#     },
-#     title='LA by RA Decile' 
-# )
-# st.plotly_chart(ra_segs_fig)
+apps_df = ftm_apps
+apps_df[apps_df['total_lvls'] == 0] = np.nan
+apps_df = apps_df[apps_df['language'].isin(st.session_state['languages'])]
+avg_total_levels = np.nanmean(apps_df['total_lvls'])
+ra_segs = get_ra_segments(avg_total_levels, users_df)
+ra_segs['la_perc'] = round(ra_segs['la_perc'], 2)
+ra_segs_fig = px.bar(ra_segs,
+    x='seg',
+    y='la_perc',
+    hover_data=['la'],
+    labels={
+        'la_perc': '% LA',
+        'seg': 'EstRA Decile',
+        'la': 'LA'
+    },
+    title='LA by EstRA Decile' 
+)
+st.plotly_chart(ra_segs_fig)
+
+ra = users_df['max_lvl'].mean() / avg_total_levels
+col2.metric('EstRA', millify(ra,2))
+
+# DAILY READING ACTIVITY
+# st.markdown('''***
+# ##### Daily Reading Activity''')
+# col5, col6 = st.columns(2)
+# cb = col5.checkbox('View')
+# if cb == True:
+#     daily_activity = get_daily_activity(users_df, start_date, languages, apps_list, countries, bq_ids, property_ids)
+#     col6.metric('Total Levels Played', millify(daily_activity['levels_played'].sum()))
+#     tab1, tab2 = st.tabs(['Timeseries', 'Heatmap'])
+#     daily_activity_fig = px.bar(daily_activity,
+#         x='event_date',
+#         y='levels_played',
+#         labels={
+#             'event_date': 'Date',
+#             'levels_played': '# Levels Played'
+#         })
+#     tab1.plotly_chart(daily_activity_fig)
+
+#     da_fig = calplot(daily_activity, x='event_date', y='levels_played', dark_theme=False, gap=.5,
+#         years_title=True, name='Levels Played', colorscale=['ghostwhite','royalblue'], space_between_plots=0.2)
+#     tab2.plotly_chart(da_fig)
+# st.markdown('***')
