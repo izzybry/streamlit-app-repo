@@ -57,7 +57,7 @@ def get_annual_campaign_data():
     ann_camp_rows = run_query(f'''
         SELECT * FROM "{ann_campaign_sheet_url}" 
     ''')
-    ann_camp_data = pd.DataFrame(columns = ['name', 'year', 'la', 'ra'],
+    ann_camp_data = pd.DataFrame(columns = ['year', 'la', 'ra'],
                             data = ann_camp_rows)
     ann_camp_data = ann_camp_data.astype({
         'year': 'int',
@@ -233,7 +233,7 @@ def get_ra_segments(total_lvls, user_data):
     return res
 
 # --- UI ---
-st.title('Annual Campaign Summary')
+st.title('Annual Summary')
 expander = st.expander('Definitions')
 # CSS to inject contained in a string
 hide_table_row_index = """
@@ -257,27 +257,27 @@ expander.table(def_df)
 
 ann_camp_data = get_annual_campaign_data()
 select_campaigns = st.sidebar.multiselect(
-    "Select Annual Campaign",
-    ann_camp_data['name'],
-    ann_camp_data['name'],#[len(ann_camp_data['name'])-1],
+    "Select Year",
+    ann_camp_data['year'],
+    ann_camp_data['year'],
     key = 'campaigns'
 )
 
-ann_camp_data = ann_camp_data[ann_camp_data['name'].isin(st.session_state['campaigns'])]
+ann_camp_data = ann_camp_data[ann_camp_data['year'].isin(st.session_state['campaigns'])]
 col1, col2 = st.columns(2)
 col1.metric('Total LA', millify(ann_camp_data['la'].sum()))
 avg_ra = np.average(ann_camp_data['ra'], weights=ann_camp_data['la'])
 col2.metric('Avg RA (Weighted)', millify(avg_ra,precision=2))
 
 # SUMMARY TABLE
-sum_table = ann_camp_data[['year', 'la', 'ra']].rename(columns={'year': 'Year', 'la': 'LA', 'ra': 'RA'})
+sum_table = ann_camp_data.rename(columns={'year': 'Year', 'la': 'LA', 'ra': 'RA'})
 sum_table = sum_table.style.format({'LA':'{:n}', 'RA': '{:.3f}'})
 st.table(sum_table)
 
 # DAILY LEARNERS ACQUIRED
 ftm_users = get_user_data()
 users_df = ftm_users[pd.to_datetime(ftm_users['LA_date']).dt.year.between(ann_camp_data['year'].min(), ann_camp_data['year'].max(), inclusive = True)]
-users_df['campaign'] = users_df['LA_date'].apply(lambda x: 'FTM_' + str(x.year))
+users_df['campaign'] = pd.DatetimeIndex(users_df['LA_date']).year
 daily_la = users_df.groupby(['campaign', 'LA_date'])['user_pseudo_id'].count().reset_index(name='LA')
 st.markdown('***')
 col3, col4 = st.columns(2)
@@ -318,6 +318,9 @@ for campaign in st.session_state['campaigns']:
     temp = get_ra_segments(avg_total_levels, users_df[users_df['campaign'] == campaign])
     temp['campaign'] = campaign
     ra_segs = pd.concat([ra_segs, temp])
+ra_segs = ra_segs.astype({
+        'campaign': 'string'
+    })
 ra_segs = ra_segs.sort_values(by=['campaign'])
 ra_segs['la_perc'] = round(ra_segs['la_perc'], 2)
 if len(st.session_state['campaigns']) == 0:
