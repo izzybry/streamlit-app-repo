@@ -66,7 +66,7 @@ def get_annual_campaign_data():
     return ann_camp_data
 
 @st.experimental_memo
-def get_user_data():
+def get_user_data(today):
     sql_query = f"""
         SELECT * FROM `dataexploration-193817.user_data.ftm_users`
     """
@@ -275,7 +275,7 @@ sum_table = sum_table.style.format({'LA':'{:n}', 'EstRA': '{:.3f}'})
 st.table(sum_table)
 
 # DAILY LEARNERS ACQUIRED
-ftm_users = get_user_data()
+ftm_users = get_user_data(pd.to_datetime("today").date())
 users_df = ftm_users[pd.to_datetime(ftm_users['LA_date']).dt.year.between(ann_camp_data['year'].min(), ann_camp_data['year'].max(), inclusive = True)]
 users_df['campaign'] = pd.DatetimeIndex(users_df['LA_date']).year
 daily_la = users_df.groupby(['campaign', 'LA_date'])['user_pseudo_id'].count().reset_index(name='LA')

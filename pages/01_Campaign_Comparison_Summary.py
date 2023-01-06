@@ -49,18 +49,6 @@ def get_campaign_data():
     return campaign_data
 
 @st.experimental_memo
-def get_user_data():
-    sql_query = f"""
-        SELECT * FROM `dataexploration-193817.user_data.ftm_users`
-    """
-    rows_raw = client.query(sql_query)
-    rows = [dict(row) for row in rows_raw]
-    df = pd.DataFrame(rows)
-    df['LA_date'] = (pd.to_datetime(df['LA_date'])).dt.date
-    df['max_lvl_date'] = (pd.to_datetime(df['max_lvl_date'])).dt.date
-    return df
-
-@st.experimental_memo
 def get_apps_data():
     apps_sheet_url = st.secrets["ftm_apps_gsheets_url"]
     apps_rows = run_query(f'SELECT app_id, language, bq_property_id, bq_project_id, total_lvls FROM "{apps_sheet_url}"')

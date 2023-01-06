@@ -36,20 +36,6 @@ def run_query(query):
     rows = rows.fetchall()
     return rows
 
-# @st.experimental_memo
-# def get_campaign_data():
-#     campaign_sheet_url = st.secrets["Campaign_gsheets_url"]
-#     campaign_rows = run_query(f'SELECT * FROM "{campaign_sheet_url}"')
-#     campaign_data = pd.DataFrame(columns = ['Campaign Name', 'Language', 'Country', 'Start Date', 'End Date', 'Total Cost (USD)'],
-#                             data = campaign_rows)
-#     campaign_data['Start Date'] = (pd.to_datetime(campaign_data['Start Date'])).dt.date
-#     campaign_data['End Date'] = (pd.to_datetime(campaign_data['End Date'])
-#                                     + pd.DateOffset(months=1) - pd.Timedelta(1, unit='D')).dt.date
-#     campaign_data = campaign_data.astype({
-#         'Total Cost (USD)': 'float'
-#     })
-#     return campaign_data
-
 @st.experimental_memo
 def get_user_data(start_date, end_date, apps, countries):
     start = start_date.strftime('%Y%m%d')

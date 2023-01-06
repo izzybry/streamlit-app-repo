@@ -50,7 +50,7 @@ def get_campaign_data():
     return campaign_data
 
 @st.experimental_memo
-def get_user_data():
+def get_user_data(today):
     sql_query = f"""
         SELECT * FROM `dataexploration-193817.user_data.ftm_users`
     """
@@ -291,7 +291,7 @@ select_campaigns = st.sidebar.multiselect(
 )
 
 # DAILY LEARNERS ACQUIRED
-ftm_users = get_user_data()
+ftm_users = get_user_data(pd.to_datetime("today").date())
 ftm_apps = get_apps_data()
 users_df = pd.DataFrame()
 for campaign in st.session_state['campaigns']:
