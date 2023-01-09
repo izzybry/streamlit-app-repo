@@ -233,8 +233,8 @@ daily_la['30 Day Rolling Mean'] = daily_la['Learners Acquired'].rolling(30).mean
 daily_la_fig = px.line(daily_la,
     x='LA_date',
     y='Learners Acquired',
-    labels={"LA_date": "Acquisition Date"},
-    title="Learners Acquired by Day")
+    labels={"LA_date": "Date", 'Learners Acquired': 'LA'},
+    title="Daily LA")
 rm_fig = px.line(daily_la,
     x='LA_date',
     y=['7 Day Rolling Mean', '30 Day Rolling Mean'],
@@ -253,7 +253,11 @@ if len(st.session_state['countries']) > 1:
         color='Learners Acquired',
         color_continuous_scale=['#1584A3', '#DB830F', '#E6DF15'],
         locationmode='country names',
-        title='Learners Acquired by Country')
+        labels = {
+            'Learners Acquired': 'LA',
+            'country': 'Country'
+        },
+        title='LA by Country')
     country_fig.update_layout(geo=dict(bgcolor= 'rgba(0,0,0,0)'))
     st.plotly_chart(country_fig)
 
