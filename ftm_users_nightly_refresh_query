@@ -1,0 +1,190 @@
+SELECT learner_cohort.user_pseudo_id,
+  learner_cohort.LA_date,
+  learner_cohort.app_id,
+  learner_cohort.country,
+  max_lvl_data.max_lvl,
+  max_lvl_data.max_lvl_date,
+  total_lvl_data.total_lvls_succeeded
+FROM
+(
+  SELECT user_pseudo_id, MIN(event_date) AS LA_date, app_info.id AS app_id, geo.country AS country
+  FROM 
+  (
+    SELECT * FROM `ftm-afrikaans.analytics_177200876.events_20*`
+    WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+    UNION ALL
+    SELECT * FROM `ftm-hindi.analytics_174638281.events_20*`
+    WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+    UNION ALL
+    SELECT * FROM `ftm-brazilian-portuguese.analytics_161789655.events_20*`
+    WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+    UNION ALL
+    SELECT * FROM `ftm-b9d99.analytics_159643920.events_20*`
+    WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+    UNION ALL
+    SELECT * FROM `ftm-english.analytics_152408808.events_20*`
+    WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2022-12-01' AND CURRENT_DATE()
+    UNION ALL
+    SELECT * FROM `ftm-french.analytics_173880465.events_20*`
+    WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+    UNION ALL
+    SELECT * FROM `ftm-isixhosa.analytics_180747962.events_20*`
+    WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+    UNION ALL
+    SELECT * FROM `ftm-kinayrwanda.analytics_177922191.events_20*`
+    WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+    UNION ALL
+    SELECT * FROM `ftm-oromo.analytics_167539175.events_20*`
+    WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+    UNION ALL
+    SELECT * FROM `ftm-swahili.analytics_160694316.events_20*`
+    WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+    UNION ALL
+    SELECT * FROM `ftm-somali.analytics_159630038.events_20*`
+    WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+    UNION ALL
+    SELECT * FROM `ftm-sepedi.analytics_180755978.events_20*`
+    WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+    UNION ALL
+    SELECT * FROM `ftm-zulu.analytics_155849122.events_20*`
+    WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+    UNION ALL
+    SELECT * FROM `ftm-southafricanenglish.analytics_173750850.events_20*`
+    WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+    UNION ALL
+    SELECT * FROM `ftm-spanish.analytics_158656398.events_20*`
+    WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+  ),
+  UNNEST(event_params) AS params
+  WHERE event_name LIKE 'GamePlay'
+  AND params.key = 'action'
+  AND params.value.string_value LIKE 'LevelSuccess%'
+  AND CAST(SUBSTR(params.value.string_value, (STRPOS(params.value.string_value, '_') + 1)) AS INT64) = 1
+  GROUP BY user_pseudo_id, app_info.id, geo.country
+  ORDER BY LA_date
+) AS learner_cohort
+LEFT JOIN
+(
+  SELECT user_pseudo_id, lvl AS max_lvl, event_date AS max_lvl_date
+  FROM
+  (
+    SELECT user_pseudo_id, event_date,
+      CAST(SUBSTR(params.value.string_value, (STRPOS(params.value.string_value, '_') + 1)) AS INT64) AS lvl,
+      ROW_NUMBER() OVER (PARTITION BY user_pseudo_id ORDER BY CAST(SUBSTR(params.value.string_value, (STRPOS(params.value.string_value, '_') + 1)) AS INT64) DESC) AS rn
+    FROM 
+    (
+      SELECT * FROM `ftm-afrikaans.analytics_177200876.events_20*`
+      WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+      UNION ALL
+      SELECT * FROM `ftm-hindi.analytics_174638281.events_20*`
+      WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+      UNION ALL
+      SELECT * FROM `ftm-brazilian-portuguese.analytics_161789655.events_20*`
+      WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+      UNION ALL
+      SELECT * FROM `ftm-b9d99.analytics_159643920.events_20*`
+      WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+      UNION ALL
+      SELECT * FROM `ftm-english.analytics_152408808.events_20*`
+      WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+      UNION ALL
+      SELECT * FROM `ftm-french.analytics_173880465.events_20*`
+      WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+      UNION ALL
+      SELECT * FROM `ftm-isixhosa.analytics_180747962.events_20*`
+      WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+      UNION ALL
+      SELECT * FROM `ftm-kinayrwanda.analytics_177922191.events_20*`
+      WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+      UNION ALL
+      SELECT * FROM `ftm-oromo.analytics_167539175.events_20*`
+      WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+      UNION ALL
+      SELECT * FROM `ftm-swahili.analytics_160694316.events_20*`
+      WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+      UNION ALL
+      SELECT * FROM `ftm-somali.analytics_159630038.events_20*`
+      WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+      UNION ALL
+      SELECT * FROM `ftm-sepedi.analytics_180755978.events_20*`
+      WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+      UNION ALL
+      SELECT * FROM `ftm-zulu.analytics_155849122.events_20*`
+      WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+      UNION ALL
+      SELECT * FROM `ftm-southafricanenglish.analytics_173750850.events_20*`
+      WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+      UNION ALL
+      SELECT * FROM `ftm-spanish.analytics_158656398.events_20*`
+      WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+    ),
+    UNNEST(event_params) AS params
+    WHERE event_name LIKE 'GamePlay'
+    AND params.key = 'action'
+    AND params.value.string_value LIKE 'LevelSuccess%'
+  )
+  WHERE rn = 1
+) AS max_lvl_data ON learner_cohort.user_pseudo_id = max_lvl_data.user_pseudo_id
+LEFT JOIN
+(
+  SELECT user_pseudo_id, COUNT(lvl) AS total_lvls_succeeded
+  FROM
+  (
+    SELECT user_pseudo_id,
+      CAST(SUBSTR(params.value.string_value, (STRPOS(params.value.string_value, '_') + 1)) AS INT64) AS lvl
+    FROM
+    (
+      SELECT * FROM `ftm-afrikaans.analytics_177200876.events_20*`
+      WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+      UNION ALL
+      SELECT * FROM `ftm-hindi.analytics_174638281.events_20*`
+      WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+      UNION ALL
+      SELECT * FROM `ftm-brazilian-portuguese.analytics_161789655.events_20*`
+      WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+      UNION ALL
+      SELECT * FROM `ftm-b9d99.analytics_159643920.events_20*`
+      WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+      UNION ALL
+      SELECT * FROM `ftm-english.analytics_152408808.events_20*`
+      WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+      UNION ALL
+      SELECT * FROM `ftm-french.analytics_173880465.events_20*`
+      WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+      UNION ALL
+      SELECT * FROM `ftm-isixhosa.analytics_180747962.events_20*`
+      WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+      UNION ALL
+      SELECT * FROM `ftm-kinayrwanda.analytics_177922191.events_20*`
+      WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+      UNION ALL
+      SELECT * FROM `ftm-oromo.analytics_167539175.events_20*`
+      WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+      UNION ALL
+      SELECT * FROM `ftm-swahili.analytics_160694316.events_20*`
+      WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+      UNION ALL
+      SELECT * FROM `ftm-somali.analytics_159630038.events_20*`
+      WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+      UNION ALL
+      SELECT * FROM `ftm-sepedi.analytics_180755978.events_20*`
+      WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+      UNION ALL
+      SELECT * FROM `ftm-zulu.analytics_155849122.events_20*`
+      WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+      UNION ALL
+      SELECT * FROM `ftm-southafricanenglish.analytics_173750850.events_20*`
+      WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+      UNION ALL
+      SELECT * FROM `ftm-spanish.analytics_158656398.events_20*`
+      WHERE PARSE_DATE('%y%m%d', _table_suffix) BETWEEN '2021-01-01' AND CURRENT_DATE()
+    ),
+    UNNEST(event_params) AS params
+    WHERE event_name LIKE 'GamePlay'
+    AND params.key = 'action'
+    AND params.value.string_value LIKE 'LevelSuccess%'
+  )
+  GROUP BY user_pseudo_id
+) AS total_lvl_data ON learner_cohort.user_pseudo_id = total_lvl_data.user_pseudo_id
+WHERE total_lvl_data.total_lvls_succeeded > 0
+ORDER BY learner_cohort.LA_date
