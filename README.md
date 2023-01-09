@@ -1,7 +1,7 @@
 # streamlit-app-repo
 
 ## Overview
-This repo contains all files related to the [Curious Learning FTM Metrics Streamlit Dashboard]("https://cl-ftm-dash.streamlit.app/"). The dashboard is mainly used for internal strategic purposes by members of Curious Learning's staff and board. It serves to provide insight into the reach and educational effectiveness of the Feed the Monster app. Key metrics of interest include Learner Acquisition (LA), Reading Acquisition (RA), Learner Acquisition Cost (LAC), and Reading Acquisition Cost (RAC). Definitions of those metrics can be found at the top of each page in the Streamlit app. 
+This repo contains all files related to the [Curious Learning FTM Metrics Streamlit Dashboard](https://cl-ftm-dash.streamlit.app/). The dashboard is mainly used for internal strategic purposes by members of Curious Learning's staff and board. It serves to provide insight into the reach and educational effectiveness of the Feed the Monster app. Key metrics of interest include Learner Acquisition (LA), Reading Acquisition (RA), Learner Acquisition Cost (LAC), and Reading Acquisition Cost (RAC). Definitions of those metrics can be found at the top of each page in the Streamlit app. 
 
 ## Contributers
 Izzy Bryant and Tinsley Galyean
