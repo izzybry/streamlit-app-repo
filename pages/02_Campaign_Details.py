@@ -233,11 +233,12 @@ users_df = get_user_data(start_date, end_date, app, country)
 campaign_data = get_campaign_metrics()
 
 # METRICS 
-col1, col2, col3, col4 = st.columns(4)
+col1, col2, col3, col4, col5 = st.columns(5)
 col1.metric('Total LA', millify(str(len(users_df))))
 col2.metric('Avg RA', millify(campaign_data.loc[campaign_data['campaign_name'] == campaign, 'ra'].item(),2))
 col3.metric('Avg LAC', millify(campaign_data.loc[campaign_data['campaign_name'] == campaign, 'lac'].item(),2))
 col4.metric('Avg RAC', millify(campaign_data.loc[campaign_data['campaign_name'] == campaign, 'rac'].item(),2))
+col5.metric('Total Spend (USD)', millify(ftm_campaigns.loc[ftm_campaigns['Campaign Name'] == campaign, 'Total Cost (USD)'].item(), 1))
 
 # DAILY LEARNERS ACQUIRED
 daily_la = users_df.groupby(['LA_date'])['user_pseudo_id'].count().reset_index(name='Learners Acquired')
@@ -278,11 +279,12 @@ ra_segs['la_perc'] = round(ra_segs['la_perc'],2)
 ra_segs_fig = px.bar(ra_segs,
     x='seg',
     y='la_perc',
-    hover_data=['rac'],
+    hover_data=['la','rac'],
     labels={
         'seg': 'RA Decile',
         'rac': 'RAC (USD)',
-        'la_perc': '% LA'
+        'la_perc': '% LA',
+        'la': 'LA'
     },
     text_auto=True,
     title='LA by RA Decile' 

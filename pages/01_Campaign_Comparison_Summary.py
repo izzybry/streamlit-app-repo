@@ -70,20 +70,19 @@ def get_campaign_metrics():
     })
     return camp_metrics_data
 
-def get_color_map(camps):
-    res = {}
-    for i in range(len(camps)):
-        res.update({camps[i]: plotly.colors.DEFAULT_PLOTLY_COLORS[i]})
-    return res
+# def get_color_map(camps):
+#     res = {}
+#     palette = [
+#         '#1c83e1', '#00c0f2', '#ff4b4b', 'LightPink', '#29b09d', '#5ce488', '#ff8700'
+#     ]
+#     for i in range(len(camps)):
+#         # res.update({camps[i]: plotly.colors.DEFAULT_PLOTLY_COLORS[i]})
+#         res.update({camps[i]: palette[i]})
+#     return res
 
-def color_camps(val):
-    color = cmap[val]
-    return f'background-color: {color}'
-
-# cmap = get_color_map(st.session_state['campaigns'])
-# top_la = top_df.sort_values(by=['LA'], ascending=False).reset_index()
-# st.table(top_la[['Campaign', 'LA']].head(10).style.applymap(color_camps, subset=['Campaign']))
-
+# def color_camps(val):
+#     color = cmap[val]
+#     return f'background-color: {color}'
 
 
 # --- UI ---
@@ -139,7 +138,7 @@ st.markdown('***')
 st.subheader('Top 10 Leaderboard')
 col1, col2 = st.columns(2)
 top_df = ftm_campaign_metrics.rename(columns={'campaign_name': 'Campaign', 'la': 'LA', 'ra': 'RA', 'rac': 'RAC', 'lac': 'LAC'})
-cmap = get_color_map(st.session_state['campaigns'])
+# cmap = get_color_map(st.session_state['campaigns'])
 top_la = top_df.sort_values(by=['LA'], ascending=False).reset_index()
 top_la.index = top_la.index + 1
 col1.write('Highest LA')
